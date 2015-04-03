@@ -60,6 +60,7 @@ orbits = pandas.read_table('pha20141031.des', sep=' ')
 orbits = orbits.to_records()
 
 timestep = 2.0 / 24.0  # in days
+timestart = simdata['expMJD'][0]
 testlong = 10.0 # years
 timeend = timestart + 365 * testlong + 1.0
 times = np.arange(timestart, timeend + timestep/2.0, timestep)
@@ -69,7 +70,7 @@ ephTimes = np.array(zip(times, repeat(4, len(times))), dtype='double', order='F'
 
 oo.pyoorb.oorb_init(ephemeris_fname="")
 
-outfile = open('phas_obs.txt', 'w')
+outfile = open('phas_obs_all.txt', 'w')
 # Add Header.
 writestring = '!!ObjID'
 names=['time', 'ra', 'dec', 'dradt', 'ddecdt', 'dist', 'magV', 'phaseangle', 'solarelon']
