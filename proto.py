@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from itertools import repeat
 import scipy
 from scipy import interpolate
@@ -8,6 +7,7 @@ import pyoorb as oo
 
 from lsst.sims.maf.db import OpsimDatabase
 from lsst.sims.utils import haversine
+
 
 def packOorbElem(sso):
     oorbelems = [sso['!!ObjID'], sso['q'], sso['e'], np.radians(sso['i']), np.radians(sso['Omega/node']), 
@@ -53,7 +53,7 @@ def ssoInFov(interpfuncs, simdata, rFov=np.radians(1.75), raCol='fieldRA', decCo
 dbAddress = 'sqlite:///enigma_1189_sqlite.db'
 ops = OpsimDatabase(dbAddress)
 
-dbcols = ['expMJD', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter', 'finSeeing', 'fiveSigmaDepth']
+dbcols = ['expMJD', 'night', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter', 'finSeeing', 'fiveSigmaDepth']
 simdata = ops.fetchMetricData(dbcols, sqlconstraint='')
 
 orbits = pandas.read_table('pha20141031.des', sep=' ')
