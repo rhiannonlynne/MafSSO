@@ -81,7 +81,33 @@ def nObsMetric(ssoObs, magH=20., Hrange=np.arange(12, 27, 0.25), snrLimit=5):
         countObs[i] = np.where(snr >= snrLimit)[0].size
     return countObs
 
-
+def DiscoveryMetric(ssoObs, magH=20., Hrange=np.arange(12, 27, 0.25), snrLimit=5, nObsPerNight=2, window=15):
+    # Given the observations for a particular object and the opsim metadata (join using joinObs)
+    # Return the number possibilities for 'discovery' of the object, as a function of H
+    discoveryChances = np.zeros(len(Hrange), int)
+    # Calculate the magnitude of this object in this filter, each H magnitude.
+    for i, H in enumerate(Hrange):
+        magObs = H - magH + ssoObs['magV'] + ssoObs['dmagColor']
+        magLimitWithTrailing = obs['fiveSigmaDepth'] - ssoObs['dmagTrailing']
+        snr = 5.0 * np.power(10., 0.4*(magLimitWithTrailing - magObs))
+        vis = np.where(snr>=snrLimit)[0]
+        if len(vis) == 0:
+            discoveryChances[i] = 0
+        else:
+            # Now to identify where observations meet the timing requirements.
+            # Where the 'night' info. Identify visits where the 'night' changes.
+            nightChangeIdx = np.where(ssoObs['night'][vis][1:] != ssoObs['night'][vis][:-1])[0]
+            nightChangeIdx = np.concatenate([np.array([vis[0]], int), nightChangeIdx+1])
+            # Look at difference in index values: if difference is > nObsPerNight, this is a 'good' night.
+            moreThanXIdx = np.where(np.abs(nightChangeIdx[1:] - nightChangeIdx[:-1]) >= nObsPerNight)[0]
+            if len(ssoObs['night'][vis]) - nightChangeIdx[-1] >= nObsPerNight:
+                moreThanXIdx = np.concatenate([moreThanXIdx, np.array([len(nightChangeIdx)-1], int)])
+            nightsWithMoreThanX = ssoObs['night'][nightChangeIdx][moreThanXIdx]
+            # Look at intervals between 'good' nights. 
+            windowIdx = np.where(np.abs(nightsWithMoreThanX[2:] - nightsWithMoreThanX[:-2]) <= window)[0]
+            nightsInWindow = ssoObs['night'][nightChangeIdx][moreThanXIdx][windowIdx]
+            discoveryChances[i] = nightsInWindow.size
+    return discoveryChances
 
 ####
 
@@ -95,17 +121,32 @@ orbits = pandas.read_table('pha20141031.des', sep=' ')
 orbits = orbits.to_records()
 
 rephs = pandas.read_table('phas_obs.txt', sep=' ')
+rephs = rephs.to_records()
 ssoObs = joinObs(rephs, simdata)
 
+Hrange = np.arange(12, 27, 0.25)
 ssos = np.unique(ssoObs['!!ObjID'])
 nobsSsos = np.zeros([len(ssos), len(Hrange)], int)
-outfile = open('nObs.txt', 'w')
+discoveries = np.zeros([len(ssos), len(Hrange)], int)
 for i, sso in enumerate(ssos):
     obs = ssoObs[np.where(ssoObs['!!ObjID'] == sso)]
-    nobsSsos[i] = nObsMetric(obs)
+    nobsSsos[i] = nObsMetric(obs, Hrange=Hrange)
+    discoveries[i] = DiscoveryMetric(obs, Hrange=Hrange)
+
+
+outfile = open('nObs.txt', 'w')
+for i, sso in enumerate(ssos):
     writestring = '%d' %(sso)
     for nobs in nobsSsos:
         writestring += ' %d' %(nobs)
+    print >>outfile, writestring
+outfile.close()
+
+outfile = open('nDiscovery.txt', 'w')
+for i, sso in enumerate(ssos):
+    writestring = '%d' %(sso)
+    for ndetect in discoveries:
+        writestring += ' %d' %(ndetect)
     print >>outfile, writestring
 outfile.close()
 
