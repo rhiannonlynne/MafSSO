@@ -66,7 +66,7 @@ simdata = ops.fetchMetricData(dbcols, sqlconstraint='')
 orbits = pandas.read_table('pha20141031.des', sep=' ')
 orbits = orbits.to_records()
 
-rephs = pandas.read_table('phas_obs.txt', sep=' ')
+rephs = pandas.read_table('phas_obs_all.txt', sep=' ')
 rephs = rephs.to_records()
 ssoObs = joinObs(rephs, simdata)
 

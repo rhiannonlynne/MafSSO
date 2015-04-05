@@ -133,4 +133,97 @@ for i, sso in enumerate(ssos):
     print >>outfile, writestring
 outfile.close()
 
+plt.figure()
+plt.title('Number of obs as function of H, individual objects')
+for i, sso in enumerate(ssos):
+    plt.plot(Hrange, nobsSsos[i])
+plt.xlabel('H mag')
+plt.ylabel('N obs')
+plt.savefig('nobs.png')
 
+plt.figure()
+plt.title('Number of obs, as function of orbital parameters')
+idx16 = np.where(Hrange == 16)[0]
+idx20 = np.where(Hrange == 20)[0]
+idx225 = np.where(Hrange == 22.5)[0]
+for i, sso in enumerate(ssos):
+    match = np.where(orbits['!!ObjID'] == sso)[0]
+    orbit = orbits[match][0]
+    plt.plot(orbit['q'], nobsSsos[i][idx16], 'bo')
+    plt.plot(orbit['q'], nobsSsos[i][idx20], 'ro')
+    plt.plot(orbit['q'], nobsSsos[i][idx225], 'go')
+plt.plot(orbit['q'], nobsSsos[i][idx16], 'bo', label='Nobs @ H=16')
+plt.plot(orbit['q'], nobsSsos[i][idx20], 'ro', label='Nobs @ H=20')
+plt.plot(orbit['q'], nobsSsos[i][idx225], 'go', label='Nobs @ H=22.5')
+plt.legend(loc='upper right', fancybox=True, numpoints=1)
+plt.xlabel('q')
+plt.ylabel('N obs')
+plt.savefig('nobs_q.png')
+
+plt.figure()
+plt.title('Number of obs for all objects')
+meanNobs = np.mean(nobsSsos, axis=0)
+minNobs = np.min(nobsSsos, axis=0)
+maxNobs = np.max(nobsSsos, axis=0)
+plt.plot(Hrange, meanNobs, label="Mean")
+plt.plot(Hrange, minNobs, label="Min")
+plt.plot(Hrange, maxNobs, label="Max")
+plt.legend(loc='upper right', fancybox=True, numpoints=1, fontsize='smaller')
+plt.xlabel('H mag')
+plt.ylabel('Mean N obs')
+plt.savefig('nobs_all.png')
+
+
+plt.figure()
+plt.title('Number of discovery opportunities as function of H, individual objects')
+for i, sso in enumerate(ssos):
+    plt.plot(Hrange, discoveries[i])
+plt.xlabel('H mag')
+plt.ylabel('N detect')
+plt.savefig('ndiscovery.png')
+
+plt.figure()
+plt.title('Number of discovery opportunities, as function of orbital parameters')
+idx16 = np.where(Hrange == 16)[0]
+idx20 = np.where(Hrange == 20)[0]
+idx225 = np.where(Hrange == 22.5)[0]
+for i, sso in enumerate(ssos):
+    match = np.where(orbits['!!ObjID'] == sso)[0]
+    orbit = orbits[match][0]
+    plt.plot(orbit['q'], discoveries[i][idx16], 'bo')
+    plt.plot(orbit['q'], discoveries[i][idx20], 'ro')
+    plt.plot(orbit['q'], discoveries[i][idx225], 'go')
+plt.plot(orbit['q'], discoveries[i][idx16], 'bo', label='Ndetect @ H=16')
+plt.plot(orbit['q'], discoveries[i][idx20], 'ro', label='Ndetect @ H=20')
+plt.plot(orbit['q'], discoveries[i][idx225], 'go', label='Ndetect @ H=22.5')
+plt.legend(loc='upper right', fancybox=True, numpoints=1)
+plt.xlabel('q')
+plt.ylabel('N discovery opportunities')
+plt.savefig('ndiscovery_q.png')
+
+plt.figure()
+plt.title('Number of discovery opportunities for all objects')
+meanNobs = np.mean(discoveries, axis=0)
+minNobs = np.min(discoveries, axis=0)
+maxNobs = np.max(discoveries, axis=0)
+plt.plot(Hrange, meanNobs, label="Mean")
+plt.plot(Hrange, minNobs, label="Min")
+plt.plot(Hrange, maxNobs, label="Max")
+plt.legend(loc='upper right', fancybox=True, numpoints=1, fontsize='smaller')
+plt.xlabel('H mag')
+plt.ylabel('N detect')
+plt.savefig('ndiscovery_ave.png')
+
+plt.figure()
+plt.title('Completeness as function of H')
+completeness = np.zeros(len(Hrange), float)
+for H in Hrange:
+    Hidx = np.where(Hrange == H)[0]
+    for i, sso in enumerate(ssos):
+        if discoveries[i][Hidx] >= 1:
+            completeness[Hidx] += 1
+plt.plot(Hrange, completeness/ssos.size, 'r-')
+plt.axvline(22.5)
+plt.xlabel('H mag')
+plt.ylabel('Completeness')
+plt.savefig('completeness.png')
