@@ -8,9 +8,10 @@ from scipy import interpolate
 import pandas
 import pyoorb as oo
 
-from lsst.sims.maf.db import OpsimDatabase
+import lsst.sims.maf.db as db
 import lsst.sims.photUtils.Bandpass as Bandpass
 import lsst.sims.photUtils.Sed as Sed
+import lsst.sims.maf.utils as utils
 
 def calcColors(sedname='C.dat'):
     # Calculate SSO colors.
@@ -57,8 +58,10 @@ def joinObs(ephs, simdata, sedname='C.dat', tol=1e-8):
 
 ###
 
-dbAddress = 'sqlite:///enigma_1189_sqlite.db'
-ops = OpsimDatabase(dbAddress)
+#dbAddress = 'sqlite:///enigma_1189_sqlite.db'
+#ops = db.OpsimDatabase(dbAddress)
+dbAddress = 'sqlite:///opsim3_61_sqlite.db'
+ops = db.OpsimDatabase(dbAddress, defaultdbTables=None, dbTables={'Summary':['Summary','obsHistID']})
 
 dbcols = ['expMJD', 'night', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter', 'finSeeing', 'fiveSigmaDepth']
 simdata = ops.fetchMetricData(dbcols, sqlconstraint='')

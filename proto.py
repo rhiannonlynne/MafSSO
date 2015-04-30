@@ -5,8 +5,9 @@ from scipy import interpolate
 import pandas
 import pyoorb as oo
 
-from lsst.sims.maf.db import OpsimDatabase
+import lsst.sims.maf.db as db
 from lsst.sims.utils import haversine
+import lsst.sims.maf.utils as utils
 
 
 def packOorbElem(sso):
@@ -50,8 +51,10 @@ def ssoInFov(interpfuncs, simdata, rFov=np.radians(1.75), raCol='fieldRA', decCo
 
 #####
 
-dbAddress = 'sqlite:///enigma_1189_sqlite.db'
-ops = OpsimDatabase(dbAddress)
+#dbAddress = 'sqlite:///enigma_1189_sqlite.db'
+#ops = db.OpsimDatabase(dbAddress)
+dbAddress = 'sqlite:///opsim3_61_sqlite.db'
+ops = db.OpsimDatabase(dbAddress, defaultdbTables=None, dbTables={'Summary':['Summary','obsHistID']})
 
 dbcols = ['expMJD', 'night', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter', 'finSeeing', 'fiveSigmaDepth']
 simdata = ops.fetchMetricData(dbcols, sqlconstraint='')
