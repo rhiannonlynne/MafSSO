@@ -79,8 +79,8 @@ def ssoInFovChip(interpfuncs, simdata, rFov=np.radians(1.75), raCol='fieldRA', d
                                            unrefractedDec=np.degrees(simdata[idx][decCol]),
                                            rotSkyPos=np.degrees(simdata[idx]['rotSkyPos']),
                                            mjd=simdata[idx]['expMJD'])
-        raObj = np.array([interpfuncs['ra'](simdata[idx]['expMJD'])])
-        decObj = np.array([interpfuncs['dec'](simdata[idx]['expMJD'])])
+        raObj = np.radians(np.array([interpfuncs['ra'](simdata[idx]['expMJD'])]))
+        decObj = np.radians(np.array([interpfuncs['dec'](simdata[idx]['expMJD'])]))
         raObj, decObj = astrometryObject.correctCoordinates(raObj, decObj, obs_metadata=obs_metadata, epoch=epoch)
         chipNames = myCamCoords.findChipName(ra=raObj,
                                              dec=decObj,
@@ -112,13 +112,25 @@ def calcColors(sedname='C.dat'):
         dmags[f] = csed.calcMag(lsst[f]) - vmag
     return dmags
 
-def joinObs(ephs, simdata, sedname='C.dat', tol=1e-8):
+def joinObs(ephs, simdata, sedname='C.dat', tol=1e-8, outfile='out.txt'):
+    outfile = open(jointObsfile, 'w')
+    outnames = ['!!ObjID', 'time', 'ra', 'dec', 'dradt', 'ddecdt', 'dist', 'magV', 'phaseangle', 'solarelon',
+                'expMJD', 'night', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter', 'finSeeing', 'fiveSigmaDepth',
+                'dmagColor', 'dmagTrailing']
+    writestring = ''
+    for n in outnames:
+        writestring += '%s ' %(n)
+    print >> outfile, writestring
+
     dmagDict = calcColors(sedname)
     idxs = np.zeros(len(ephs), int)
     dmagColor = np.zeros(len(ephs), float)
     ### FIX THIS - search sorted? (?)
     for i, obs in enumerate(ephs):
-        match = np.where(np.abs(simdata['expMJD'] - obs['time']) < tol) [0]
+        match = np.where(np.abs(simdata['expMJD'] - obs['time']) < tol)
+        if len(match) == 0:
+            continue
+        match = match[0]
         if len(match) != 1:
             print 'Found %d simdata matches - expected only one' %(len(match))
         idxs[i] = match
@@ -128,15 +140,27 @@ def joinObs(ephs, simdata, sedname='C.dat', tol=1e-8):
     vel = np.sqrt(ephs['dradt']**2 + ephs['ddecdt']**2)  #deg/day
     vel = vel / 24.0  # "/s
     # See https://listserv.lsstcorp.org/mailman/private/lsst-solarsystem/2006-December/24.html
-    # should grab simObs['expTime'] .. 
+    # should grab simObs['expTime'] ..
     t = 30.0 # seconds
     teff = t/(1+1.6*vel*t/simdata[idxs]['finSeeing'])
     dmagTrailing = 1.25*np.log10(t/teff)
     # Convert to recarray.
     dmags = np.rec.fromarrays([dmagColor, dmagTrailing], names=['dmagColor', 'dmagTrailing'])
-    # Join arrays.
-    ssoObs = merge_arrays([ephs, simdata[idxs], dmags], flatten=True, asrecarray=True)
-    return ssoObs
+    # Write these out to disk.
+    for eph, simdat, dmag in zip(ephs, simdata[idxs], dmags):
+        writestring = ''
+        for n in outnames:
+            if n in ephs.dtype.names:
+                writestring += '%s ' %(eph[n])
+            elif n in simdat.dtype.names:
+                writestring += '%s ' %(simdat[n])
+            elif n in dmag.dtype.names:
+                writestring += '%s ' %(dmag[n])
+            else:
+                print 'Could not find ', n
+        print >> outfile, writestring
+    outfile.close()
+
 
 
 
@@ -148,13 +172,13 @@ simdata = ops.fetchMetricData(dbcols, sqlconstraint='')
 #orbitfile = 'pha20141031.des'
 #orbitfile = 'shortpha.des'
 
-orbits = pandas.read_table(orbitfile, sep=' ')
+orbits = pandas.read_table(orbitfile, sep='\s*')
 orbits = orbits.to_records()
 
 timestep = 2.0 / 24.0  # in days
-timestart = simdata['expMJD'][0]
+timestart = simdata['expMJD'].min() - 1.0
+timeend = simdata['expMJD'].max() + 1.0
 nyears = 10.0 # years
-timeend = timestart + 365 * nyears + 1.0
 times = np.arange(timestart, timeend + timestep/2.0, timestep)
 # For pyoorb, we need to tag times with timescales;
 # 1= MJD_UTC, 2=UT1, 3=TT, 4=TAI
@@ -188,25 +212,9 @@ for sso in orbits:
 outfile.close()
 
 
-rephs = pandas.read_table(ssoObsfile, sep=' ')
+rephs = pandas.read_table(ssoObsfile, sep='\s*')
 rephs = rephs.to_records()
 
-ssoObs = joinObs(rephs, simdata)
 
 jointObsfile = ssoObsfile.replace('_obs.txt', '_allObs.txt')
-# write out joint data.
-outfile = open(jointObsfile, 'w')
-outnames = ['!!ObjID', 'time', 'ra', 'dec', 'dradt', 'ddecdt', 'dist', 'magV', 'phaseangle', 'solarelon',
-            'expMJD', 'night', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter', 'finSeeing', 'fiveSigmaDepth',
-            'dmagColor', 'dmagTrailing']
-writestring = ''
-for n in outnames:
-    writestring += '%s ' %(n)
-print >> outfile, writestring
-for obs in ssoObs:
-    writestring = ''
-    for n in outnames:
-        writestring += '%s ' %(obs[n])
-    print >> outfile, writestring
-outfile.close()
-
+joinObs(rephs, simdata, outfile=jointObsfile)
