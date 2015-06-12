@@ -28,7 +28,7 @@ def calc_m5(visitFilter, filtsky, seeing, expTime, airmass, tauCloud):
 
 def calc_night(expMJD, minexpMJD):
     local_midnight = 0.16
-    const = minexpmjd + localmidnight - 0.5
+    const = minexpMJD + local_midnight - 0.5
     night = np.floor(expMJD - const)
     return night
 
@@ -40,7 +40,7 @@ def convert_cols(data):
     cols_need = ['obsHistID', 'sessionID', 'propID', 'fieldID', 'fieldRA', 'fieldDec', 'filter',
                  'expDate', 'expMJD', 'night', 'visitTime', 'visitExpTime', 'finRank', 'finSeeing',
                  'transparency', 'airmass', 'vSkyBright', 'filtSkyBrightness', 'rotSkyPos', 'rotTelPos',
-                 'lst', 'altitude', 'azimuth', 'dist2Moon', 'solarElong', 
+                 'lst', 'altitude', 'azimuth', 'dist2Moon', 'solarElong',
                  'moonRA', 'moonDec', 'moonAlt', 'moonAZ', 'moonPhase', 'sunAlt', 'sunAz', 'phaseAngle',
                  'rScatter', 'mieScatter', 'moonIllum', 'moonBright', 'darkBright', 'rawSeeing', 'wind',
                  'humidity', 'slewDist', 'slewTime', 'fiveSigmaDepth', 'ditheredRA', 'ditheredDec']
@@ -50,15 +50,17 @@ def convert_cols(data):
     cols_map = {'ditheredRA':'hexdithra', 'ditheredDec':'hexdithdec', 'visitTime':'expTime',
                 'vSkyBright':'VskyBright', 'filtSkyBrightness':'filtSky', 'finSeeing':'seeing',
                 'transparency':'xparency' }
-    cols_default = {'visitExpTime':30.0, 'solarElong':-99, 'wind':-99, 'humidity':-99, 'moonAZ':-99} 
+    cols_map_backup = {'ditheredRA':-99, 'ditheredDec':-99}
+    cols_default = {'visitExpTime':30.0, 'solarElong':-99, 'wind':-99, 'humidity':-99, 'moonAZ':-99}
     cols_calc = {'fiveSigmaDepth':calc_m5, 'night':calc_night}
-    
+
     print "Needed but not present or translated."
     for c in cols_need:
         if c not in cols_have and c not in cols_default and c not in cols_calc:
             if c in cols_map:
                 if cols_map[c] not in cols_have:
-                    print c
+                    if c not in cols_map_backup:
+                        print c
             else:
                 print c
     print "Present, but not in needed list. "
@@ -72,7 +74,10 @@ def convert_cols(data):
         if c in cols_have:
             data2[c] = data[c]
         elif c in cols_map:
-            data2[c] = data[cols_map[c]]
+            if cols_map[c] not in data and c in cols_map_backup:
+                data2[c] = np.ones(nvisits,float) * cols_map_backup[c]
+            else:
+                data2[c] = data[cols_map[c]]
         elif c in cols_default:
             data2[c] = np.ones(nvisits, float) * cols_default[c]
         elif c in cols_calc:
@@ -88,9 +93,11 @@ def convert_cols(data):
 
 
 if __name__ == '__main__':
-    data = read_data('opsim3_61_output.dat')
+    #data = read_data('opsim3_61_output.dat')
+    data = read_data('opsim4_152_output.dat')
     data2 = convert_cols(data)
     print data2.keys()
-    engine = create_engine('sqlite:///opsim3_61_sqlite.db')
+    #engine = create_engine('sqlite:///opsim3_61_sqlite.db')
+    engine = create_engine('sqlite:///opsim4_152_sqlite.db')
     data2.to_sql('summary', engine, index=False)
     

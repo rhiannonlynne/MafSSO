@@ -11,7 +11,7 @@ import pyoorb as oo
 
 from lsst.sims.maf.db import OpsimDatabase
 from lsst.sims.utils import haversine
-
+from lsst.sims.maf.utils import opsimUtils
 
 # For the footprint generation and conversion between galactic/equatorial coordinates.
 from lsst.obs.lsstSim import LsstSimMapper
@@ -164,12 +164,15 @@ def joinObs(ephs, simdata, sedname='C.dat', tol=1e-8, outfile='out.txt'):
 
 
 
-dbAddress = 'sqlite:///enigma_1189_sqlite.db'
-ops = OpsimDatabase(dbAddress)
+#dbAddress = 'sqlite:///enigma_1189_sqlite.db'
+#ops = OpsimDatabase(dbAddress)
+dbAddress = 'sqlite:///opsim4_152_sqlite.db'
+ops = opsimUtils.connectOpsimDb({'dbAddress':dbAddress, 'Summary':'summary'})
+
 dbcols = ['expMJD', 'night', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter', 'finSeeing', 'fiveSigmaDepth']
 simdata = ops.fetchMetricData(dbcols, sqlconstraint='')
 
-#orbitfile = 'pha20141031.des'
+orbitfile = 'pha20141031.des'
 #orbitfile = 'shortpha.des'
 
 orbits = pandas.read_table(orbitfile, sep='\s*')
