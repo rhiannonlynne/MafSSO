@@ -250,7 +250,7 @@ def calcColors(sedname='C.dat'):
         dmags[f] = csed.calcMag(lsst[f]) - vmag
     return dmags
 
-def joinObs(ephs, simdata, idxObs, sedname='C.dat', tol=1e-8, outfileName='out.txt',
+def joinObs(objId, ephs, simdata, idxObs, sedname='C.dat', tol=1e-8, outfileName='out.txt',
             seeingcol='finSeeing', expTime='visitExpTime'):
     """
     Call for each object; write out the observations of each object.
@@ -280,7 +280,7 @@ def joinObs(ephs, simdata, idxObs, sedname='C.dat', tol=1e-8, outfileName='out.t
     dmags = np.rec.fromarrays([dmagColor, dmagTrailing, dmagDetect],
                               names=['dmagColor', 'dmagTrailing', 'dmagDetect'])
 
-    outCols = list(ephs.dtype.names) + list(simdata.dtype.names) + list(dmags.dtype.names)
+    outCols = ['objId',] + list(ephs.dtype.names) + list(simdata.dtype.names) + list(dmags.dtype.names)
     if not os.path.isfile(outfileName):
         outfile = open(outfileName, 'w')
         writestring = '#'
@@ -292,7 +292,7 @@ def joinObs(ephs, simdata, idxObs, sedname='C.dat', tol=1e-8, outfileName='out.t
 
     # Write results.
     for eph, simdat, dm in zip(ephs, simdata[idxObs], dmags):
-        writestring = ''
+        writestring = '%s ' %(objId)
         for col in ephs.dtype.names:
             writestring += '%s ' %(eph[col])
         for col in simdat.dtype.names:
@@ -329,11 +329,12 @@ if __name__ == '__main__':
         oorbephems, err = oo.pyoorb.oorb_ephemeris(in_orbits = oorbelems, in_obscode=807, in_date_ephems=ephTimes)
         ephs = unpackEphs(oorbephems)
         interpfuncs = interpolateEphs(ephs)
-        #idxObs = ssoInFov(interpfuncs, simdata)
-        idxObs = ssoInFovChip(interpfuncs, simdata)
-        tvis = simdata['expMJD'][idxObs]
-        obs = np.recarray([len(tvis)], dtype=ephs.dtype)
-        for n in interpfuncs:
-            obs[n] = interpfuncs[n](tvis)
-        obs['time'] = tvis
-        joinObs(obs, simdata, idxObs, outfileName=outfileName)
+        idxObs = ssoInFov(interpfuncs, simdata)
+        #idxObs = ssoInFovChip(interpfuncs, simdata)
+        if len(idxObs) > 0:
+            tvis = simdata['expMJD'][idxObs]
+            obs = np.recarray([len(tvis)], dtype=ephs.dtype)
+            for n in interpfuncs:
+                obs[n] = interpfuncs[n](tvis)
+            obs['time'] = tvis
+            joinObs(sso['objId'], obs, simdata, idxObs, outfileName=outfileName)
