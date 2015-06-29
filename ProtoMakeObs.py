@@ -321,7 +321,7 @@ if __name__ == '__main__':
     ops = OpsimDatabase(dbAddress)
 
     dbcols = ['expMJD', 'night', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter',
-              'finSeeing', 'fiveSigmaDepth', 'visitExpTime']
+              'finSeeing', 'fiveSigmaDepth', 'visitExpTime', 'solarElong']
     simdata = ops.fetchMetricData(dbcols, sqlconstraint='')
 
     for sso in orbits:
@@ -329,8 +329,8 @@ if __name__ == '__main__':
         oorbephems, err = oo.pyoorb.oorb_ephemeris(in_orbits = oorbelems, in_obscode=807, in_date_ephems=ephTimes)
         ephs = unpackEphs(oorbephems)
         interpfuncs = interpolateEphs(ephs)
-        idxObs = ssoInFov(interpfuncs, simdata)
-        #idxObs = ssoInFovChip(interpfuncs, simdata)
+        #idxObs = ssoInFov(interpfuncs, simdata)
+        idxObs = ssoInFovChip(interpfuncs, simdata)
         if len(idxObs) > 0:
             tvis = simdata['expMJD'][idxObs]
             obs = np.recarray([len(tvis)], dtype=ephs.dtype)
