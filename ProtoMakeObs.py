@@ -75,7 +75,7 @@ def readOrbits(orbitfile='pha20141031.des'):
                 alternatives = ['semimajor']
                 colMap = _updateColMap(colMap, o, alternatives, ssoCols)
             elif o == 'meanAnom':
-                alternative = ['meanAnomaly', 'meananomaly', 'M']
+                alternatives = ['M', 'meanAnomaly']
                 colMap = _updateColMap(colMap, o, alternatives, ssoCols)
 
     # Add the columns we can generate.
