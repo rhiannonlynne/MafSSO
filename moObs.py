@@ -22,6 +22,7 @@ class MoOrbits(object):
     def __init__(self):
         self.orbits = None
         self.ssoIds = None
+        self.nSso = 0
 
 
     def _updateColMap(self, colMap, outCol, alternativeNames, ssoCols):
@@ -123,6 +124,7 @@ class MoOrbits(object):
                                         orbits[colMap['epoch']], Hval, gval, aval, meanAnomval],
                                         names = outCols)
         self.ssoIds = np.unique(self.orbits['objId'])
+        self.nSso = len(self.ssoIds)
 
 
 class MoObs(MoOrbits):
