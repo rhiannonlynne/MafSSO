@@ -1,4 +1,4 @@
-import os, sys
+import os
 import numpy as np
 import pandas as pd
 
@@ -9,21 +9,19 @@ from scipy import interpolate
 import lsst.sims.photUtils.Bandpass as Bandpass
 import lsst.sims.photUtils.Sed as Sed
 
-from lsst.sims.utils import haversine
-
-# For the footprint generation and conversion between galactic/equatorial coordinates.
+from lsst.sims.utils import haversine, ObservationMetaData
 from lsst.obs.lsstSim import LsstSimMapper
 from lsst.sims.coordUtils import findChipName, observedFromICRS
-from lsst.sims.catalogs.generation.db.ObservationMetaData import ObservationMetaData
 
+__all__ = ['MoOrbits', 'MoObs', 'runMoObs']
 
-class Moo(object):
+class MoOrbits(object):
     """
-    This class stores the orbits for a set of moving objects and provides methods to generate
-      ephemerides for those objects at a user-specified set of times.
+    This class stores the orbits for a set of moving objects (and reads them from disk).
     """
     def __init__(self):
         self.orbits = None
+        self.ssoIds = None
 
 
     def _updateColMap(self, colMap, outCol, alternativeNames, ssoCols):
@@ -127,6 +125,12 @@ class Moo(object):
         self.ssoIds = np.unique(self.orbits['objId'])
 
 
+class MoObs(MoOrbits):
+    """
+    Class to generate observations of a set of moving objects.
+    Inherits from moOrbits (in order to read and save orbits).
+    """
+
     def setTimes(self, timestep=1., ndays=1., timestart=49353.):
         """
         Generate and return an array for oorb of the ephemeris times desired.
@@ -148,6 +152,19 @@ class Moo(object):
         'sso' can be the orbital elements of a single object or of multiple objects.
         To normalize the column names to those expected here, read in data using 'readOrbits'.
         """
+        # Python oorb element format:
+        #
+        # 0: orbitId  (cannot be a string)
+        # 1 - 6: orbital elements, using radians for angles
+        # 7: element type code
+        #       2 = cometary - means timescale is TT, too
+        #       3 = keplerians - timescale?
+        # 8: epoch
+        # 9: timescale for the epoch; 1= MJD_UTC, 2=UT1, 3=TT, 4=TAI
+        # 10: magHv
+        # 11: G
+        #
+        #  so we have to do a little translating from the orbits DataFrame to the elements we want in this array.
         if sso is None:
             sso = self.orbits
         if len(sso.shape) == 0:
@@ -202,6 +219,22 @@ class Moo(object):
         grouped either by object (i.e. length of ra array == length of times) (default)
         or grouped by time (i.e. length of ra array == number of objects) (if byObject not true).
         """
+        # Python oorb ephem array format:
+        #   [objid][time][ephemeris information @ that time]
+        # 0 = distance (geocentric distance)
+        # 1 = ra (deg)
+        # 2 = dec (deg)
+        # 3 = mag
+        # 4 = ephem mjd
+        # 5 = ephem mjd timescale
+        # 6 = dra/dt (deg/day) sky motion
+        # 7 = ddec/dt (deg/day) sky motion
+        # 8 = phase angle (deg)
+        # 9 = solar elongation angle (deg)
+        # So usually we want to swap the axes at least, so that instead of all the ephemeris information @ a particular time
+        # being the accessible bit of information, we have all the RA values over time for a single object ('byObject')
+        # Alternatively, we may want all the RA values for all objects at one time. This is also an option, by setting 'byObject' to False.
+        # The ephemeris generation also returns an error code: err=0 means everything was successful.
         ephs = np.swapaxes(oorbephems, 2, 0)
         # oorbcols=['delta', 'ra', 'dec', 'magV', 'time', 'timescale', 'dradt', 'ddecdt', 'phase', 'solarelon']
         velocity = np.sqrt(ephs[6]**2 + ephs[7]**2)
@@ -222,6 +255,8 @@ class Moo(object):
 
         Use the individual private methods if you want to unpack the ephemerides in a manner other than 'byObject'.
         """
+        if sso is None:
+            sso = self.orbits
         oorbelems = self._packOorbElem(sso=sso)
         oorbephs = self._generateOorbEphs(oorbelems, ephTimes=ephTimes)
         ephs = self._unpackOorbEphs(oorbephs, byObject=True)
@@ -247,6 +282,7 @@ class Moo(object):
         self.mapper = LsstSimMapper()
         self.camera = self.mapper.camera
         self.epoch = 2000.0
+        self.cameraFov=np.radians(2.1)
 
     def ssoInFov(self, interpfuncs, simdata, rFov=np.radians(1.75),
                  useCamera=True,
@@ -258,8 +294,8 @@ class Moo(object):
         raSso = np.radians(interpfuncs['ra'](simdata['expMJD']))
         decSso = np.radians(interpfuncs['dec'](simdata['expMJD']))
         sep = haversine(raSso, decSso, simdata[simdataRaCol], simdata[simdataDecCol])
-        idxObsRough = np.where(sep<rFov)[0]
         if not useCamera:
+            idxObsRough = np.where(sep<rFov)[0]
             return idxObsRough
         # Or go on and use the camera footprint.
         try:
@@ -267,6 +303,7 @@ class Moo(object):
         except AttributeError:
             self._setupCamera()
         idxObs = []
+        idxObsRough = np.where(sep<self.cameraFov)[0]
         for idx in idxObsRough:
             mjd = simdata[idx]['expMJD']
             obs_metadata = ObservationMetaData(unrefractedRA=np.degrees(simdata[idx][simdataRaCol]),
@@ -332,7 +369,7 @@ class Moo(object):
         self.wroteHeader = False
 
     def writeObs(self, objId, interpfuncs, simdata, idxObs, outfileName='out.txt',
-                 sedname='C.dat', tol=1e-8, 
+                 sedname='C.dat', tol=1e-8,
                  seeingCol='finSeeing', expTimeCol='visitExpTime'):
         """
         Call for each object; write out the observations of each object.
@@ -394,13 +431,13 @@ class Moo(object):
 
 ## Function to link the above class methods to generate an output file with moving object observations.
 
-def runMoo(orbitfile, outfileName, opsimfile,
-           dbcols=None, tstep=2./24., nyears=10, useCamera=True):
+def runMoObs(orbitfile, outfileName, opsimfile,
+            dbcols=None, tstep=2./24., nyears=10, useCamera=True):
 
     from lsst.sims.maf.db import OpsimDatabase
 
     # Read orbits.
-    moogen = Moo()
+    moogen = MoObs()
     moogen.readOrbits(orbitfile)
 
     # Read opsim database.
@@ -429,4 +466,4 @@ def runMoo(orbitfile, outfileName, opsimfile,
 
 # Test example:
 if __name__ == '__main__':
-    runMoo('pha20141031.des', 'test_allObs.txt', 'enigma_1189_sqlite.db', nyears=1)
+    runMoObs('pha20141031.des', 'test_allObs.txt', 'enigma_1189_sqlite.db', nyears=1)
