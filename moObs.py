@@ -402,17 +402,18 @@ class MoObs(MoOrbits):
                 raise UserWarning('Could not find filter %s in calculated colors!' %(f))
             match = np.where(simdata[idxObs]['filter'] == f)[0]
             dmagColor[match] = dmagColorDict[f]
+        magFilter = ephs['magV'] + dmagColor
         # Calculate trailing and detection loses.
         dmagTrail, dmagDetect = self._calcMagLosses(ephs['velocity'], simdata[seeingCol][idxObs],
                                                     simdata[expTimeCol][idxObs])
         # Turn into a recarray so it's easier below.
-        dmags = np.rec.fromarrays([dmagColor, dmagTrail, dmagDetect],
-                                  names=['dmagColor', 'dmagTrail', 'dmagDetect'])
+        dmags = np.rec.fromarrays([magFilter, dmagColor, dmagTrail, dmagDetect],
+                                  names=['magFilter', 'dmagColor', 'dmagTrail', 'dmagDetect'])
 
         outCols = ['objId',] + list(ephs.dtype.names) + list(simdata.dtype.names) + list(dmags.dtype.names)
 
         if not self.wroteHeader:
-            writestring = '#'
+            writestring = ''
             for col in outCols:
                 writestring += '%s ' %(col)
             self.outfile.write('%s\n' %(writestring))
