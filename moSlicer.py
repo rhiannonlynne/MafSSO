@@ -38,15 +38,24 @@ class MoSlicer(MoOrbits):
         Read observations created by moObs.
         """
         # For now, just read all the observations (should be able to chunk this though).
-        self.ssoObs = pd.read_table(obsfile, sep='\s*', engine='python')
+        self.allObs = pd.read_table(obsfile, delim_whitespace=True)
         # We may have to rename the first column from '#objId' to 'objId'.
-        if self.ssoObs.columns.values[0].startswith('#'):
-            newcols = self.ssoObs.columns.values
+        if self.allObs.columns.values[0].startswith('#'):
+            newcols = self.allObs.columns.values
             newcols[0] = newcols[0].replace('#', '')
-            self.ssoObs.columns = newcols
-        if 'magFilter' not in self.ssoObs.columns.values:
-            self.ssoObs['magFilter'] = self.ssoObs['magV'] + self.ssoObs['dmagColor']
-        # self.ssoObs = self.ssoObs.to_records()
+            self.allObs.columns = newcols
+        if 'magFilter' not in self.allObs.columns.values:
+            self.allObs['magFilter'] = self.allObs['magV'] + self.allObs['dmagColor']
+        self.subsetObs()
+
+    def subsetObs(self, pandasConstraint=None):
+        """
+        Choose a subset of all the observations, such as those in a particular time period.
+        """
+        if pandasConstraint is None:
+            self.obs = self.allObs
+        else:
+            self.obs = self.allObs.query(pandasConstraint)
 
     def _sliceObs(self, idx):
         """
@@ -55,10 +64,9 @@ class MoSlicer(MoOrbits):
          progressively iterated through the series of ssoIds (so we can 'chunk' the reading).
         """
         # Find the matching orbit.
-        orb = self.orbits[idx]
+        orb = self.orbits.iloc[idx]
         # Find the matching observations.
-        print orb['objId']
-        obs = self.ssoObs.query('objId == "%d"' %(orb['objId']))
+        obs = self.obs.query('objId == %d' %(orb['objId']))
         # Return the values for H to consider for metric.
         if self.Hrange is not None:
             Hvals = self.Hrange
