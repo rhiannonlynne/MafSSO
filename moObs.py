@@ -42,7 +42,7 @@ class MoOrbits(object):
         'objID q e inc node argPeri tPeri epoch H g a meanAnom'
         """
         self.orbitfile = orbitfile
-        orbits = pd.read_table(orbitfile, sep='\s*', engine='python')
+        orbits = pd.read_table(orbitfile, delim_whitespace=True)
         # Normalize the column names, as different inputs tend to have some commonly-different names.
         ssoCols = orbits.columns.values.tolist()
         nSso = len(orbits)
@@ -55,7 +55,7 @@ class MoOrbits(object):
             else:
                 # Try to find corresponding value
                 if o == 'objId':
-                    alternatives = ['!!ObjID','objid', '!!OID']
+                    alternatives = ['!!ObjID', 'objid', '!!OID']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'inc':
                     alternatives = ['i']
@@ -118,11 +118,19 @@ class MoOrbits(object):
         else:
             tPerival = orbits[colMap['tPeri']]
 
-        # Put it all together and turn it into a numpy array.
-        self.orbits = np.rec.fromarrays([orbids, qval, orbits[colMap['e']], orbits[colMap['inc']],
-                                        orbits[colMap['node']], orbits[colMap['argPeri']], tPerival,
-                                        orbits[colMap['epoch']], Hval, gval, aval, meanAnomval],
-                                        names = outCols)
+        # Put it all together into a dataframe.
+        self.orbits = pd.DataFrame({'objId':orbids,
+                                    'q':qval,
+                                    'e':orbits[colMap['e']],
+                                    'inc':orbits[colMap['inc']],
+                                    'node':orbits[colMap['node']],
+                                    'argPeri':orbits[colMap['argPeri']],
+                                    'tPeri':tPerival,
+                                    'epoch':orbits[colMap['epoch']],
+                                    'H':Hval,
+                                    'g':gval,
+                                    'a':aval,
+                                    'M':meanAnomval})
         self.ssoIds = np.unique(self.orbits['objId'])
         self.nSso = len(self.ssoIds)
 
@@ -150,7 +158,7 @@ class MoObs(MoOrbits):
 
     def _packOorbElem(self, sso=None):
         """
-        Convert numpy structured array of orbital elements into the array OpenOrb needs as input.
+        Convert row from pandas dataframe (or numpy recarray) of orbital elements into the array OpenOrb needs as input.
         'sso' can be the orbital elements of a single object or of multiple objects.
         To normalize the column names to those expected here, read in data using 'readOrbits'.
         """
@@ -169,25 +177,28 @@ class MoObs(MoOrbits):
         #  so we have to do a little translating from the orbits DataFrame to the elements we want in this array.
         if sso is None:
             sso = self.orbits
-        if len(sso.shape) == 0:
-            # Passed a single SSO
-            nSso = 0
-            sso0 = sso
+        # Do we have a single item (Series) or multiples (Dataframe)?
+        if isinstance(sso, pd.Series):
+            # Passed a single SSO in Series.
+            nSso = 1
+        elif isinstance(sso, pd.DataFrame):
+            # Multiple SSO in dataframe.
+            nSso = len(sso)
+        else:
+            if len(sso.shape) == 0:
+                # Single SSO, in a numpy array.
+                nSso = 1
+            else:
+                # Multiple SSSO in numpy array (or something else?).
+                nSso = len(sso)
+        if nSso == 1:
+            orbids = 0
             elem_type = 2
             epoch_type = 3
         else:
-            nSso = len(sso)
-            sso0 = sso[0]
+            orbids = np.arange(0, nSso, 1)
             elem_type = np.zeros(nSso) + 2
             epoch_type = np.zeros(nSso) + 3
-        # Check on orbit id type - pyoorb needs numbers not strings.
-        if (isinstance(sso0['objId'], float) or isinstance(sso0['objId'], int)):
-            orbids = sso['objId']
-        else:
-            if nSso == 0:
-                orbids = 0
-            else:
-                orbids = np.arange(0, nSso, 1)
         # Convert to format for pyoorb, INCLUDING converting inclination, node, argperi to RADIANS
         oorbElem = np.column_stack((orbids, sso['q'], sso['e'], np.radians(sso['inc']),
                                      np.radians(sso['node']), np.radians(sso['argPeri']),
@@ -215,7 +226,7 @@ class MoObs(MoOrbits):
     def _unpackOorbEphs(self, oorbephems, byObject=True):
         """
         Given oorb ephemeris array (shape = object / times / eph@time),
-        Return an array aranged with
+        Return a numpy array aranged with
          columns = ['delta', 'ra', 'dec', 'mag', 'time', 'timescale', 'dradt', 'ddecdt', 'phase', 'solarelon']
          as the second
         grouped either by object (i.e. length of ra array == length of times) (default)
@@ -235,19 +246,19 @@ class MoObs(MoOrbits):
         # 9 = solar elongation angle (deg)
         # So usually we want to swap the axes at least, so that instead of all the ephemeris information @ a particular time
         # being the accessible bit of information, we have all the RA values over time for a single object ('byObject')
-        # Alternatively, we may want all the RA values for all objects at one time. This is also an option, by setting 'byObject' to False.
-        # The ephemeris generation also returns an error code: err=0 means everything was successful.
+        # Alternatively, we may want all the RA values for all objects at one time.
+        #     This is also an option, by setting 'byObject' to False.
         ephs = np.swapaxes(oorbephems, 2, 0)
         # oorbcols=['delta', 'ra', 'dec', 'magV', 'time', 'timescale', 'dradt', 'ddecdt', 'phase', 'solarelon']
         velocity = np.sqrt(ephs[6]**2 + ephs[7]**2)
         if byObject:
             ephs = np.swapaxes(ephs, 2, 1)
             velocity = np.swapaxes(velocity, 1, 0)
-        # Create numpy structured array
+        # Create a numpy recarray. We're deviating from the DataFrame here probably mostly due to history.
         ephs = np.rec.fromarrays([ephs[0], ephs[1], ephs[2], ephs[3], ephs[4],
                                   ephs[6], ephs[7], ephs[8], ephs[9], velocity],
-                                 names=['delta', 'ra', 'dec', 'magV', 'time', 'dradt',
-                                        'ddecdt', 'phase', 'solarelon','velocity'])
+                                  names=['delta', 'ra', 'dec', 'magV', 'time', 'dradt',
+                                         'ddecdt', 'phase', 'solarelon','velocity'])
         return ephs
 
     def generateEphs(self, sso=None, ephTimes=None):
@@ -364,10 +375,7 @@ class MoObs(MoOrbits):
         return dmagTrail, dmagDetect
 
     def _openOutput(self, outfileName):
-        if not os.path.isfile(outfileName):
-            self.outfile = open(outfileName, 'w')
-        else:
-            self.outfile = open(outfileName, 'a')
+        self.outfile = open(outfileName, 'w')
         self.wroteHeader = False
 
     def writeObs(self, objId, interpfuncs, simdata, idxObs, outfileName='out.txt',
