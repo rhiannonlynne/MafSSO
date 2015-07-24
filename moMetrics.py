@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 
-__all__ = ['BaseMoMetric', 'DiscoveryMetric']
+__all__ = ['BaseMoMetric', 'NObsMetric', 'DiscoveryMetric']
 
 
 class BaseMoMetric(object):
@@ -22,7 +22,7 @@ class BaseMoMetric(object):
          adjusting the apparent magnitude of the object in this filter for any changes to H
          (in case of cloning the objects in this orbit).
         """
-        return Href - Hval + ssoObs[self.magFilter]
+        return ssoObs[self.magFilter] + Hval - Href
 
     def _calcMagLimit(self, ssoObs):
         """
@@ -53,8 +53,33 @@ class BaseMoMetric(object):
         """
         completeness = 1.0 / (1 + np.exp((appMag - magLimit)/sigma))
         probability = np.random.random_sample(len(appMag))
-        vis = np.where(probability <= completeness)[0]
+        vis = np.where(probability <= completeness, 1, 0)
         return vis
+
+class NObsMetric(BaseMoMetric):
+    """
+    Count the number of observations for an object.
+    """
+    def __init__(self, snrLimit=None, **kwargs):
+        """
+        @ snrLimit .. if snrLimit is None, this uses the _calcVis method/completeness
+                      if snrLimit is not None, this uses that value as a cutoff instead.
+        """
+        super(NObsMetric, self).__init__(**kwargs)
+        self.snrLimit = snrLimit
+
+    def run(self, ssoObs, Hval, Href):
+        if len(ssoObs) == 0:
+            return 0
+        appMag = self._calcAppMag(ssoObs, Hval, Href)
+        magLimit = self._calcMagLimit(ssoObs)
+        if self.snrLimit is None:
+            vis = self._calcVis(appMag, magLimit)
+        else:
+            snr = self._calcSNR(appMag, magLimit)
+            vis = np.where(snr >= self.snrLimit)[0]
+        return np.where(vis == 1)[0].size
+
 
 class DiscoveryMetric(BaseMoMetric):
     """
@@ -78,7 +103,6 @@ class DiscoveryMetric(BaseMoMetric):
         self.tWindow = tWindow
 
     def run(self, ssoObs, Hval, Href):
-        eps = 1e-10
         if len(ssoObs) == 0:
             return 0
         # Calculate the apparent magnitude of this object.
@@ -102,7 +126,7 @@ class DiscoveryMetric(BaseMoMetric):
             nIdx = np.concatenate([nIdx, np.array([len(visSort)-1])])
             # Find the nights & indexes where there were more than nObsPerNight observations.
             obsPerNight = (nIdx - np.roll(nIdx, 1))[1:]
-            nWithXObs = n[np.where(obsPerNight >= nObsPerNight)]
+            nWithXObs = n[np.where(obsPerNight >= self.nObsPerNight)]
             nIdxMany = np.searchsorted(ssoObs[self.night][visSort], nWithXObs)
             nIdxManyEnd = np.searchsorted(ssoObs[self.night][visSort], nWithXObs, side='right') - 1
             # Check that nObsPerNight observations are within tNight
@@ -110,20 +134,20 @@ class DiscoveryMetric(BaseMoMetric):
             timesEnd = ssoObs[self.expMJD][visSort][nIdxManyEnd]
             # Identify the nights where the total time interval may exceed tNight
             # (but still have a subset of nObsPerNight which are within tNight)
-            check = np.where((timesEnd - timesStart > tNight) & (nIdxManyEnd + 1 - nIdxMany > nObsPerNight))[0]
+            check = np.where((timesEnd - timesStart > self.tNight) & (nIdxManyEnd + 1 - nIdxMany > self.nObsPerNight))[0]
             bad = []
             for i, j, c in zip(visSort[nIdxMany][check], visSort[nIdxManyEnd][check], check):
                 t = ssoObs[self.expMJD][i:j+1]
                 dtimes = (np.roll(t, 1-nObsPerNight) - t)[:-1]
-                if np.all(dtimes > tnight+eps):
+                if np.all(dtimes > self.tNight+eps):
                     bad.append(c)
             goodIdx = np.delete(visSort[nIdxMany], bad)
             # Now (with indexes of start of 'good' nights with nObsPerNight within tNight),
             # look at the intervals between 'good' nights (for tracks)
-            if len(goodIdx) < nNightsPerWindow:
-                discoveryChances[i] = 0
+            if len(goodIdx) < self.nNightsPerWindow:
+                discoveryChances = 0
             else:
-                dnights = (np.roll(ssoObs[self.night][goodIdx], 1-nNightsPerWindow) - ssoObs[self.night][goodIdx])
-                discoveryChances[i] = len(np.where((dnights >= 0) & (dnights <= tWindow))[0])
+                dnights = (np.roll(ssoObs[self.night][goodIdx], 1-self.nNightsPerWindow) - ssoObs[self.night][goodIdx])
+                discoveryChances = len(np.where((dnights >= 0) & (dnights <= self.tWindow))[0])
         return discoveryChances
 
