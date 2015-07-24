@@ -23,14 +23,18 @@ class MoSlicer(MoOrbits):
         """
         # Read orbits (inherited from MoOrbits).
         self.readOrbits(orbitfile)
-        # See if we're cloning orbits, and set slicer shape (metric shape) accordingly.
+        # See if we're cloning orbits, and set slicer size accordingly.
+        self.slicePoints = {}
         self.Hrange = Hrange
         if self.Hrange is not None:
             self.slicerShape = [self.nSso, len(Hrange)]
+            self.slicePoints['H'] = Hrange
         else:
             self.slicerShape = [self.nSso, 1]
+            self.slicePoints['H'] = self.orbits['H']
         # Set observations to None.
         self.ssoObs = None
+        self.obsfile = None
 
 
     def readObs(self, obsfile):
@@ -38,6 +42,7 @@ class MoSlicer(MoOrbits):
         Read observations created by moObs.
         """
         # For now, just read all the observations (should be able to chunk this though).
+        self.obsfile = obsfile
         self.allObs = pd.read_table(obsfile, delim_whitespace=True)
         # We may have to rename the first column from '#objId' to 'objId'.
         if self.allObs.columns.values[0].startswith('#'):
@@ -87,8 +92,39 @@ class MoSlicer(MoOrbits):
         """
         Returns result of self._getObs when iterating over moSlicer.
         """
-        if self.idx >= 10: #self.nSso:
+        if self.idx >= self.nSso:
             raise StopIteration
         idx = self.idx
         self.idx += 1
         return self._sliceObs(idx)
+
+    def __getitem__(self, idx):
+        # This may not be guaranteed to work if/when we implement chunking of the obsfile.
+        return self._sliceObs(idx)
+
+    def __eq__(self, otherSlicer):
+        """
+        Evaluate if two slicers are equal.
+        """
+        result = False
+        if isinstance(otherSlicer, MoSlicer):
+            if otherSlicer.obsfile == self.obsfile:
+                result = True
+        return result
+
+    def __ne__(self, otherSlicer):
+        """
+        Evaluate if two slicers are not equal.
+        """
+        if self == otherSlicer:
+            return False
+        else:
+            return True
+
+    def write(self, filename, metricBundle):
+        """
+        Cheap and dirty write to disk.
+        """
+        #store = pd.HDFStore(filename+'.h5')
+        df = pd.DataFrame(metricBundle.metricValues)
+        df.to_csv(filename)
