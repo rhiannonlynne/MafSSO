@@ -443,7 +443,7 @@ class MoObs(MoOrbits):
 ## Function to link the above class methods to generate an output file with moving object observations.
 
 def runMoObs(orbitfile, outfileName, opsimfile,
-            dbcols=None, tstep=2./24., nyears=10, useCamera=True):
+            dbcols=None, tstep=2./24., nyears=None, useCamera=True):
 
     from lsst.sims.maf.db import OpsimDatabase
 
@@ -462,13 +462,18 @@ def runMoObs(orbitfile, outfileName, opsimfile,
         for col in reqcols:
             if col not in dbcols:
                 dbcols.append(col)
-    ndays = nyears * 365
-    simdata = opsdb.fetchMetricData(dbcols, sqlconstraint='night<%d' %(ndays))
+    if nyears is not None:
+        ndays = nyears * 365
+        sqlconstraint = 'night<%d' %(ndays)
+    else:
+        ndays = 3650.0
+        sqlconstraint = ''
+    simdata = opsdb.fetchMetricData(dbcols, sqlconstraint=sqlconstraint)
 
     moogen.setTimes(timestep=tstep, ndays=ndays, timestart=simdata['expMJD'].min())
 
     moogen.setupOorb()
-    for sso in moogen.orbits:
+    for i, sso in moogen.orbits.iterrows():
         ephs = moogen.generateEphs(sso)
         interpfuncs = moogen.interpolateEphs(ephs)
         idxObs = moogen.ssoInFov(interpfuncs, simdata, useCamera=useCamera)
