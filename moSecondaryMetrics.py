@@ -26,7 +26,7 @@ class MoCompletenessMetric(BaseMoMetric):
         else:
             # The Hvals are spread more randomly among the objects (we probably used one per object).
             stepsize = (Hvals.max() - Hvals.min()) / self.nbins
-            bins = np.arange(Hvals.min(), Hvals.max() + stepsize, stepsize)
+            bins = np.arange(Hvals.min(), Hvals.max() + stepsize/2.0, stepsize)
             n_all, b = np.histogram(discoveries[0], bins)
             condition = np.where(discoveries[0] >= self.requiredChances)[0]
             n_found, b = np.histogram(discoveries[0][condition], bins)

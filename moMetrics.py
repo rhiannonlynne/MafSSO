@@ -10,6 +10,7 @@ class BaseMoMetric(object):
                  m5Col='fiveSigmaDepth', lossCol='dmagDetect',
                  magFilterCol='magFilter',
                  nightCol='night', expMJDCol='expMJD'):
+        self.metricDtype = float
         self.m5Col = m5Col
         self.lossCol = lossCol
         self.magFilterCol = magFilterCol

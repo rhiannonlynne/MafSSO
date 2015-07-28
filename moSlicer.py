@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 
 from moObs import MoOrbits
+from moPlots import *
 
 __all__ = ['MoSlicer']
 
@@ -32,9 +33,14 @@ class MoSlicer(MoOrbits):
         else:
             self.slicerShape = [self.nSso, 1]
             self.slicePoints['H'] = self.orbits['H']
+        self.slicePoints['orbits'] = self.orbits
         # Set observations to None.
         self.ssoObs = None
         self.obsfile = None
+        # Set default 'bad' value.
+        self.badval = 0
+        # Set default plotFuncs.
+        self.plotFuncs = [MetricVsH, MetricVsOrbit]
 
 
     def readObs(self, obsfile):
@@ -78,7 +84,7 @@ class MoSlicer(MoOrbits):
         else:
             Hvals = orb['H']
         return {'obs': obs.to_records(),
-                'orb': orb,
+                'orbit': orb,
                 'Hvals': Hvals}
 
     def __iter__(self):
@@ -109,7 +115,8 @@ class MoSlicer(MoOrbits):
         result = False
         if isinstance(otherSlicer, MoSlicer):
             if otherSlicer.obsfile == self.obsfile:
-                result = True
+                if np.all(otherSlicer.slicePoints['H'] == self.slicePoints['H']):
+                    result = True
         return result
 
     def __ne__(self, otherSlicer):
