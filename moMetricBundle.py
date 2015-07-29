@@ -1,17 +1,21 @@
 import os
+from copy import deepcopy
 import numpy as np
 import numpy.ma as ma
 
+from moSlicer import MoSlicer
+from moMetrics import BaseMoMetric
 import moPlots as moPlots
 import lsst.sims.maf.utils as utils
 import lsst.sims.maf.plots as plots
+
 
 class MoMetricBundle(object):
     def __init__(self, metric, slicer, constraint=None,
                  runName='opsim', metadata=None,
                  fileRoot=None,
                  plotDict=None, plotFuncs=None,
-                 secondaryMetrics=None):
+                 summaryMetrics=None):
         """
         Instantiate moving object metric bundle, save metric/slicer/constraint, etc.
         """
@@ -31,10 +35,10 @@ class MoMetricBundle(object):
         self.plotDict = {'units':'@H'}
         self.setPlotDict(plotDict)
         self.setPlotFuncs(plotFuncs)
-        if secondaryMetrics is not None:
-            self.secondaryMetrics = secondaryMetrics
+        self.setSummaryMetrics(summaryMetrics)
         # Set up metric value storage.
         self.metricValues = None
+        self.summaryValues = None
 
     def _buildFileRoot(self, fileRoot=None):
         """
@@ -73,6 +77,22 @@ class MoMetricBundle(object):
                                             mask = np.zeros(self.slicer.slicerShape, 'bool'),
                                             fill_value= self.slicer.badval)
 
+    def setSummaryMetrics(self, summaryMetrics):
+        """
+        Set (or reset) the summary metrics for the metricbundle.
+        """
+        if summaryMetrics is not None:
+            if isinstance(summaryMetrics, BaseMoMetric):
+                self.summaryMetrics = [summaryMetrics]
+            else:
+                self.summaryMetrics = []
+                for s in summaryMetrics:
+                    if not isinstance(s, BaseMoMetric):
+                        raise ValueError('SummaryStats must only contain instantiated moving object metric objects')
+                    self.summaryMetrics.append(s)
+        else:
+            self.summaryMetrics = []
+
     def setPlotDict(self, plotDict):
         """
         Set or update any property of plotDict.
@@ -99,30 +119,61 @@ class MoMetricBundle(object):
             # Moving object slicers keep instantiated plotters in the self.slicer.plotFuncs.
             self.plotFuncs = [pFunc for pFunc in self.slicer.plotFuncs]
 
-    def runSecondaryMetric(self, secondaryMetric):
+    def reduceMetric(self, reduceFunc, reducePlotDict=None, reduceDisplayDict=None):
         """
-        Calculate secondary-type metrics, such as completeness or integrate over H distribution.
+        Run reduce methods on the metric bundle, such as completeness or integrate over H distribution.
         These return a new metric bundle.
         """
-        newBundle = MoMetricBundle(metric=secondaryMetric, slicer=self.slicer,
+        rName = reduceFunc.__name__.replace('reduce', '')
+        reduceName = self.metric.name + '_' + rName
+        newmetric = deepcopy(self.metric)
+        newmetric.name = reduceName
+        newBundle = MoMetricBundle(metric=newmetric, slicer=self.slicer,
                                    constraint=self.constraint,
                                    runName=self.runName, metadata=self.metadata,
-                                   plotDict=self.plotDict, plotFuncs=self.plotFuncs)
-        if secondaryMetric.name == 'Completeness':
+                                   plotDict=self.plotDict, plotFuncs=self.plotFuncs,
+                                   summaryMetrics=self.summaryMetrics)
+        if rName == 'Completeness':
+            newBundle.metric.name = 'Completeness'
             newBundle.plotFuncs = [moPlots.MetricVsH()]
             newBundle.setPlotDict({'ylabel':'Completeness @H'})
-        if secondaryMetric.name == 'IntegrateOverH':
+        if rName == 'CumulativeH':
             newBundle.metric.name = self.metric.name + ' (cumulative H)'
             newBundle.setPlotDict({'units':'<=H'})
             if 'ylabel' in newBundle.plotDict:
                 newBundle.plotDict['ylabel'] = newBundle.plotDict['ylabel'].replace('@H', '<=H')
+        newBundle._buildFileRoot()
         # Calculate new metric values.
-        newBundle.metricValues, Hrange = secondaryMetric.run(self.metricValues, self.slicer.slicePoints['H'])
-        if len(Hrange) != len(self.slicer.slicePoints['H']):
-            newBundle.slicer.slicePoints['H'] = Hrange
-            if secondaryMetric.name == 'Completeness':
-                newBundle.slicer.slicerShape = [len(Hrange), len(Hrange)]
+        newBundle.metricValues, Hvals = reduceFunc(self.metricValues, self.slicer.slicePoints['H'])
+        if newBundle.metricValues.shape[1] != self.slicer.slicerShape[1]:
+            # Then something happened with reduceFunction --
+            #  .. usually, this would be with 'completeness'. It can reshape the metric values so that
+            #  (a) if we cloned H, we now go from multiple metricvalues per H value to a single value per H [(nSso, nHrange) -> (1, nHrange)]
+            #  (b) if we did not clone H, we now have a binned metricvalues - one per H bin, instead of one per nsso [(nSso, 1) -> (nHrange, nHrange)]
+            # and we don't really care (in general) because we won't be re-slicing the observations. But we do need to update the slicePoints['H'],
+            #  and for that we need a new slicer. Rereading the orbit file is a bit of a pain, but not too bad.
+            newslicer = MoSlicer(orbitfile=self.slicer.orbitfile, Hrange=Hvals)
+            newBundle.slicer = newslicer
         return newBundle
+
+    def computeSummaryStats(self, resultsDb=None):
+        """
+        Compute summary statistics on metricValues, using summaryMetrics (metricbundle list).
+        So far, the only summary metric that is possible to use would be 'ValueAtHMetric'.
+        """
+        if self.summaryValues is None:
+            self.summaryValues = {}
+        if self.summaryMetrics is not None:
+            # Build array of metric values, to use for (most) summary statistics.
+            for m in self.summaryMetrics:
+                summaryName = m.name
+                summaryVal = m.run(self.metricValues, self.slicer.slicePoints['H'])
+                self.summaryValues[summaryName] = summaryVal
+                # Add summary metric info to results database, if applicable.
+                if resultsDb:
+                    metricId = resultsDb.updateMetric(self.metric.name, self.slicer.slicerName,
+                                                      self.runName, self.sqlconstraint, self.metadata, None)
+                    resultsDb.updateSummaryStat(metricId, summaryName=summaryName, summaryValue=summaryVal)
 
     def plot(self, plotHandler=None, plotFunc=None, outfileSuffix=None, savefig=False):
         """
@@ -139,7 +190,7 @@ class MoMetricBundle(object):
                 plotFunc = plotFunc()
 
         plotHandler.setMetricBundles([self])
-        plotHandler.setPlotDicts(plotDicts=[self.plotDict], reset=True)
+        # The plotDict will be automatically accessed when the plotHandler calls the plotting method.
         madePlots = {}
         if plotFunc is not None:
             # We haven't updated plotHandler to know about these kinds of plots yet.
@@ -170,11 +221,14 @@ class MoMetricBundle(object):
 ####
 
 class MoMetricBundleGroup(object):
-    def __init__(self, bundleDict, outDir='.'):
+    def __init__(self, bundleDict, outDir='.', resultsDb=None):
+        # Not really handling resultsDb yet.
         self.bundleDict = bundleDict
         self.outDir = outDir
         if not os.path.isdir(self.outDir):
             os.makedirs(self.outDir)
+        self.resultsDb = resultsDb
+
         self.slicer = self.bundleDict.itervalues().next().slicer
         for b in self.bundleDict.itervalues():
             if b.slicer != self.slicer:

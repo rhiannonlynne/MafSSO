@@ -9,14 +9,11 @@ __all__ = ['MoSlicer']
 
 class MoSlicer(MoOrbits):
 
-    def __init__(self, orbitfile, obsfile, Hrange=None):
+    def __init__(self, orbitfile, Hrange=None):
         """
         Instantiate the MoSlicer object.
 
         orbitfile = the file with the orbit information on the objects.
-
-        If Hrange is not None (instead, set to a numpy array), then
-        each orbit will be cloned to the H values specified by Hrange.
 
         Iteration over the MoSlicer will go as:
           - iterate over each orbit;
@@ -25,19 +22,18 @@ class MoSlicer(MoOrbits):
         self.slicerName = 'MoSlicer'
         # Read orbits (inherited from MoOrbits).
         self.readOrbits(orbitfile)
-        # Read observations.
-        self.readObs(obsfile)
-        # See if we're cloning orbits, and set slicer size accordingly.
         self.slicePoints = {}
+        self.slicePoints['orbits'] = self.orbits
+        # See if we're cloning orbits.
         self.Hrange = Hrange
+        # And set the slicer shape/size.
         if self.Hrange is not None:
             self.slicerShape = [self.nSso, len(Hrange)]
             self.slicePoints['H'] = Hrange
         else:
             self.slicerShape = [self.nSso, 1]
             self.slicePoints['H'] = self.orbits['H']
-        self.slicePoints['orbits'] = self.orbits
-        # Set default 'bad' value.
+        # Set the rest of the slicePoint information once
         self.badval = 0
         # Set default plotFuncs.
         self.plotFuncs = [MetricVsH(),

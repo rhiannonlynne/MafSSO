@@ -1,15 +1,21 @@
+import inspect
 import numpy as np
-
+import numpy.ma as ma
+from lsst.sims.maf.metrics import MetricRegistry
 
 __all__ = ['BaseMoMetric', 'NObsMetric', 'DiscoveryChancesMetric',
            'ActivityOverTimeMetric', 'ActivityOverPeriodMetric']
 
 
 class BaseMoMetric(object):
+    """Base class for the moving object metrics."""
+    __metaclass__ = MetricRegistry
+
     def __init__(self, metricName=None, units='#', badval=0,
                  m5Col='fiveSigmaDepth', lossCol='dmagDetect',
                  magFilterCol='magFilter',
-                 nightCol='night', expMJDCol='expMJD'):
+                 nightCol='night', expMJDCol='expMJD',
+                 Hindex = 0.3):
         self.metricDtype = float
         self.name = metricName
         if self.name is None:
@@ -26,6 +32,24 @@ class BaseMoMetric(object):
         self.snrLimit = None
         self.colsReq = [self.m5Col, self.lossCol, self.magFilterCol,
                         self.nightCol, self.expMJDCol]
+        # Set parameters used for reduce methods.
+        self.Hindex = Hindex
+
+        # Set up dictionary of reduce functions (may be empty).
+        self.reduceFuncs = {}
+        self.reduceOrder = {}
+        self.reduceUnits = {}
+        for i, r in enumerate(inspect.getmembers(self, predicate=inspect.ismethod)):
+            if r[0].startswith('reduce'):
+                reducename = r[0].replace('reduce', '', 1)
+                self.reduceFuncs[reducename] = r[1]
+                self.reduceOrder[reducename] = i
+                try:
+                    self.reduceUnits[reducename] = r[1].units
+                except AttributeError:
+                    self.reduceUnits[reducename] = '@H'
+        self.reduceOrder['CumulativeH'] = len(self.reduceFuncs)
+
 
     def _calcAppMag(self, ssoObs, Hval, Href):
         """
@@ -90,6 +114,21 @@ class BaseMoMetric(object):
         raise NotImplementedError
 
 
+    def reduceCumulativeH(self, metricVals, Hvals):
+        """
+        Take a calculated (differential H, "H @ X") metric value and
+        integrate over a size distribution to return an "H<=X" value.
+        Currently supports only a single power law distribution.
+        """
+        self.units = '<= H'
+        # Set expected H distribution.
+        # dndh = differential size distribution (number in this bin)
+        dndh = np.power(10., self.Hindex*(Hvals-Hvals.min()))
+        # dn = cumulative size distribution (number in this bin and brighter)
+        intVals = np.cumsum(metricVals*dndh, axis=1)/np.cumsum(dndh)
+        return intVals, Hvals
+
+
 class NObsMetric(BaseMoMetric):
     """
     Count the number of observations for an object.
@@ -114,7 +153,8 @@ class DiscoveryChancesMetric(BaseMoMetric):
     Count the number of discovery opportunities for an object.
     """
     def __init__(self, nObsPerNight=2, tNight=90.*60.,
-                 nNightsPerWindow=3, tWindow=15, snrLimit=None, **kwargs):
+                 nNightsPerWindow=3, tWindow=15, snrLimit=None,
+                 requiredChances=1, **kwargs):
         """
         @ nObsPerNight = number of observations per night required for tracklet
         @ tNight = max time start/finish for the tracklet (seconds)
@@ -122,6 +162,10 @@ class DiscoveryChancesMetric(BaseMoMetric):
         @ tWindow = max number of nights in track (days)
         @ snrLimit .. if snrLimit is None then uses 'completeness' calculation,
                    .. if snrLimit is not None, then uses this value as a cutoff.
+
+        Parameters for reduce method (Completeness)
+        @ requiredChances = number of possible discovery chances required to count an object as 'found'
+        @ nBins = number of bins to split "H" into, if not using cloned H distribution.
         """
         super(DiscoveryChancesMetric, self).__init__(**kwargs)
         self.snrLimit = snrLimit
@@ -129,6 +173,10 @@ class DiscoveryChancesMetric(BaseMoMetric):
         self.tNight = tNight
         self.nNightsPerWindow = nNightsPerWindow
         self.tWindow = tWindow
+        self.requiredChances = requiredChances
+        # If H is not a cloned distribution, then we need to specify how to bin these values.
+        self.nbins = 20
+        self.minHrange = 1.0
 
     def run(self, ssoObs, orb, Hval):
         """SsoObs = Dataframe, orb=Dataframe, Hval=single number."""
@@ -175,6 +223,43 @@ class DiscoveryChancesMetric(BaseMoMetric):
                 dnights = (np.roll(ssoObs[self.nightCol][goodIdx], 1-self.nNightsPerWindow) - ssoObs[self.nightCol][goodIdx])
                 discoveryChances = len(np.where((dnights >= 0) & (dnights <= self.tWindow))[0])
         return discoveryChances
+
+    def reduceCompleteness(self, discoveryChances, Hvals):
+        """
+        Take the discoveryChances metric results and turn it into
+        completeness estimate (relative to the entire population).
+        Require at least 'requiredChances' to count an object as "found".
+        """
+        nSsos = discoveryChances.shape[0]
+        nHval = len(Hvals)
+        discoveriesH = discoveryChances.swapaxes(0, 1)
+        if nHval == discoveryChances.shape[1]:
+            # Hvals array is probably the same as the cloned H array.
+            completeness = ma.MaskedArray(data = np.zeros([1, nHval], float),
+                                          mask = np.zeros([1, nHval], 'bool'),
+                                          fill_value = 0.0)
+            for i, H in enumerate(Hvals):
+                completeness.data[0][i] = np.where(discoveriesH[i].filled(0) >= self.requiredChances)[0].size
+            completeness = completeness / float(nSsos)
+        else:
+            # The Hvals are spread more randomly among the objects (we probably used one per object).
+            hrange = Hvals.max() - Hvals.min()
+            minH = Hvals.min()
+            if hrange < self.minHrange:
+                hrange = self.minHrange
+                minH = Hvals.min() - hrange/2.0
+            stepsize = hrange / float(self.nbins)
+            bins = np.arange(minH, minH + hrange + stepsize/2.0, stepsize)
+            Hvals = bins[:-1]
+            n_all, b = np.histogram(discoveriesH[0], bins)
+            condition = np.where(discoveriesH[0] >= self.requiredChances)[0]
+            n_found, b = np.histogram(discoveriesH[0][condition], bins)
+            completeness = ma.MaskedArray(data = np.zeros([1, len(Hvals)], float),
+                                          mask = np.zeros([1, len(Hvals)], bool),
+                                          fill_value = 0.0)
+            completeness.data[0] = n_found.astype(float) / n_all.astype(float)
+            completeness.mask[0] = np.where(n_all==0, True, False)
+        return completeness, Hvals
 
 
 class ActivityOverTimeMetric(BaseMoMetric):

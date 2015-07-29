@@ -16,7 +16,7 @@ class MetricVsH(BasePlotter):
         self.plotType = 'MetricVsH'
         self.objectPlotter = False
         self.defaultPlotDict = {'title':None, 'xlabel':'H (mag)', 'ylabel':None, 'label':None,
-                                'color':'b', 'linestyle':'-', 'npReduce':np.mean, 'nbins':30}
+                                'color':'b', 'linestyle':'-', 'npReduce':None, 'nbins':None}
         self.minHrange=1.0
 
     def __call__(self, metricValue, slicer, userPlotDict, fignum=None):
@@ -25,6 +25,9 @@ class MetricVsH(BasePlotter):
         plotDict.update(self.defaultPlotDict)
         plotDict.update(userPlotDict)
         Hvals = slicer.slicePoints['H']
+        reduceFunc = plotDict['npReduce']
+        if reduceFunc is None:
+            reduceFunc = np.mean
         if Hvals.shape == metricValue.shape:
             # We have a simple set of values to plot against H.
             # This may be due to running a secondary metric, such as completeness.
@@ -32,7 +35,7 @@ class MetricVsH(BasePlotter):
         elif len(Hvals) == slicer.slicerShape[1]:
             # Using cloned H distribution.
             # Apply 'npReduce' method directly to metric values, and plot at matching H values.
-            mVals = plotDict['npReduce'](metricValue, axis=0)
+            mVals = reduceFunc(metricValue, axis=0)
         else:
             # Probably each object has its own H value.
             hrange = Hvals.max() - Hvals.min()
@@ -40,7 +43,10 @@ class MetricVsH(BasePlotter):
             if hrange < self.minHrange:
                 hrange = self.minHrange
                 minH = Hvals.min() - hrange/2.0
-            stepsize = hrange  / float(plotDict['nbins'])
+            nbins = plotDict['nbins']
+            if nbins is None:
+                nbins = 30
+            stepsize = hrange  / float(nbins)
             bins = np.arange(minH, minH + hrange + stepsize/2.0, stepsize)
             # In each bin of H, calculate the 'npReduce' value of the corresponding metricValues.
             inds = np.digitize(Hvals, bins)
@@ -51,7 +57,7 @@ class MetricVsH(BasePlotter):
                 if len(match) == 0:
                     mVals[i] = slicer.badval
                 else:
-                    mVals[i] = plotDict['npReduce'](match.filled())
+                    mVals[i] = reduceFunc(match.filled())
             Hvals = bins
         plt.plot(Hvals, mVals, color=plotDict['color'], linestyle=plotDict['linestyle'],
                 label=plotDict['label'])
@@ -76,9 +82,9 @@ class MetricVsOrbit(BasePlotter):
         self.defaultPlotDict = {'title':None, 'xlabel':xaxis, 'ylabel':yaxis,
                                 'xaxis':xaxis, 'yaxis':yaxis,
                                 'label':None, 'cmap':cm.cubehelix,
-                                'npReduce':np.mean,
-                                'nxbins':100, 'nybins':100,
-                                'Hval':None, 'Hwidth':1.0}
+                                'npReduce':None,
+                                'nxbins':None, 'nybins':None, 'levels':None,
+                                'Hval':None, 'Hwidth':None}
 
     def __call__(self, metricValue, slicer, userPlotDict, fignum=None):
         fig = plt.figure(fignum)
@@ -88,27 +94,36 @@ class MetricVsOrbit(BasePlotter):
         xvals = slicer.slicePoints['orbits'][plotDict['xaxis']]
         yvals = slicer.slicePoints['orbits'][plotDict['yaxis']]
         # Set x/y bins.
+        nxbins = plotDict['nxbins']
+        nybins = plotDict['nybins']
+        if nxbins is None:
+            nxbins = 100
+        if nybins is None:
+            nybins = 100
         if 'xbins' in plotDict:
             xbins = plotDict['xbins']
         else:
-            xbinsize = (xvals.max() - xvals.min())/float(plotDict['nxbins'])
+            xbinsize = (xvals.max() - xvals.min())/float(nxbins)
             xbins = np.arange(xvals.min(), xvals.max() + xbinsize/2.0, xbinsize)
         if 'ybins' in plotDict:
             ybins = plotDict['ybins']
         else:
-            ybinsize = (yvals.max() - yvals.min())/float(plotDict['nybins'])
+            ybinsize = (yvals.max() - yvals.min())/float(nybins)
             ybins = np.arange(yvals.min(), yvals.max() + ybinsize/2.0, ybinsize)
         nxbins = len(xbins)
         nybins = len(ybins)
         # Identify the relevant metricValues for the Hvalue we want to plot.
         Hvals = slicer.slicePoints['H']
+        Hwidth = plotDict['Hwidth']
+        if Hwidth is None:
+            Hwidth = 1.0
         if plotDict['Hval'] is None:
             if len(Hvals) == slicer.slicerShape[1]:
                 Hidx = len(Hvals) / 2
                 Hval = Hvals[Hidx]
             else:
                 Hval = np.median(Hvals)
-                Hidx = np.where(np.abs(Hvals - Hval) <= plotDict['Hwidth']/2.0)[0]
+                Hidx = np.where(np.abs(Hvals - Hval) <= Hwidth/2.0)[0]
         if len(Hvals) == slicer.slicerShape[1]:
             mVals = np.swapaxes(metricValue, 1, 0)[Hidx].filled()
         else:
@@ -117,13 +132,16 @@ class MetricVsOrbit(BasePlotter):
         binvals = np.zeros((nybins, nxbins), dtype='float') + slicer.badval
         xidxs = np.digitize(xvals, xbins) - 1
         yidxs = np.digitize(yvals, ybins) - 1
+        reduceFunc = plotDict['npReduce']
+        if reduceFunc is None:
+            reduceFunc = np.mean
         for iy in range(nybins):
             ymatch = np.where(yidxs == iy)[0]
             for ix in range(nxbins):
                 xmatch = np.where(xidxs[ymatch] == ix)[0]
                 matchVals = mVals[ymatch][xmatch]
                 if len(matchVals) > 0:
-                    binvals[iy][ix] = plotDict['npReduce'](matchVals)
+                    binvals[iy][ix] = reduceFunc(matchVals)
         xi, yi = np.meshgrid(xbins, ybins)
         if 'colorMin' in plotDict:
             vMin = plotDict['colorMin']
@@ -133,7 +151,10 @@ class MetricVsOrbit(BasePlotter):
             vMax = plotDict['colorMax']
         else:
             vMax = binvals.max()
-        levels = np.arange(vMin, vMax, (vMax-vMin)/200.0)
+        nlevels = plotDict['levels']
+        if nlevels is None:
+            nlevels = 200
+        levels = np.arange(vMin, vMax, (vMax-vMin)/float(nlevels))
         plt.contourf(xi, yi, binvals, levels, extend='max',
                      zorder=0, cmap=plotDict['cmap'])
         cbar = plt.colorbar()
@@ -153,7 +174,7 @@ class MetricVsOrbitPoints(BasePlotter):
         self.defaultPlotDict = {'title':None, 'xlabel':xaxis, 'ylabel':yaxis,
                                 'label':None, 'cmap':cm.cubehelix,
                                 'xaxis':xaxis, 'yaxis':yaxis,
-                                'Hval':None, 'Hwidth':1.0,
+                                'Hval':None, 'Hwidth':None,
                                 'foregroundPoints':True, 'backgroundPoints':False}
 
     def __call__(self, metricValue, slicer, userPlotDict, fignum=None):
@@ -165,13 +186,16 @@ class MetricVsOrbitPoints(BasePlotter):
         yvals = slicer.slicePoints['orbits'][plotDict['yaxis']]
         # Identify the relevant metricValues for the Hvalue we want to plot.
         Hvals = slicer.slicePoints['H']
+        Hwidth = plotDict['Hwidth']
+        if Hwidth is None:
+            Hwidth = 1.0
         if plotDict['Hval'] is None:
             if len(Hvals) == slicer.slicerShape[1]:
                 Hidx = len(Hvals) / 2
                 Hval = Hvals[Hidx]
             else:
                 Hval = np.median(Hvals)
-                Hidx = np.where(np.abs(Hvals - Hval) <= plotDict['Hwidth']/2.0)[0]
+                Hidx = np.where(np.abs(Hvals - Hval) <= Hwidth/2.0)[0]
         if len(Hvals) == slicer.slicerShape[1]:
             mVals = np.swapaxes(metricValue, 1, 0)[Hidx]
         else:
