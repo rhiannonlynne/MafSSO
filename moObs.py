@@ -443,13 +443,21 @@ class MoObs(MoOrbits):
 ## Function to link the above class methods to generate an output file with moving object observations.
 
 def runMoObs(orbitfile, outfileName, opsimfile,
-            dbcols=None, tstep=2./24., nyears=None, useCamera=True):
+            dbcols=None, tstep=2./24., nyears=None,
+            rFov=np.radians(1.75), useCamera=True):
 
     from lsst.sims.maf.db import OpsimDatabase
 
     # Read orbits.
     moogen = MoObs()
     moogen.readOrbits(orbitfile)
+    print "Read orbit information from %s" %(orbitfile)
+
+    # Check rfov/camera choices.
+    if useCamera:
+        print "Using camera footprint"
+    else:
+        print "Not using camera footprint; using circular fov with %f degrees radius" %(np.degrees(rFov))
 
     # Read opsim database.
     opsdb = OpsimDatabase(opsimfile)
@@ -469,16 +477,18 @@ def runMoObs(orbitfile, outfileName, opsimfile,
         ndays = 3650.0
         sqlconstraint = ''
     simdata = opsdb.fetchMetricData(dbcols, sqlconstraint=sqlconstraint)
+    print "Queried data from opsim %s, fetched %f days worth of visits." %(opsimfile, ndays/365.)
 
     moogen.setTimes(timestep=tstep, ndays=ndays, timestart=simdata['expMJD'].min())
+    print "Will generate ephemerides on grid of %f day timesteps, then extrapolate to opsim times." %(tstep)
 
     moogen.setupOorb()
     for i, sso in moogen.orbits.iterrows():
         ephs = moogen.generateEphs(sso)
         interpfuncs = moogen.interpolateEphs(ephs)
-        idxObs = moogen.ssoInFov(interpfuncs, simdata, useCamera=useCamera)
+        idxObs = moogen.ssoInFov(interpfuncs, simdata, rFov=rFov, useCamera=useCamera)
         moogen.writeObs(sso['objId'], interpfuncs, simdata, idxObs, outfileName=outfileName)
-
+    print "Wrote output observations to file %s" %(outfileName)
 
 # Test example:
 if __name__ == '__main__':
