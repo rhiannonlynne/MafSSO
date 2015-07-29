@@ -9,7 +9,7 @@ __all__ = ['MoSlicer']
 
 class MoSlicer(MoOrbits):
 
-    def __init__(self, orbitfile, Hrange=None):
+    def __init__(self, orbitfile, obsfile, Hrange=None):
         """
         Instantiate the MoSlicer object.
 
@@ -22,8 +22,11 @@ class MoSlicer(MoOrbits):
           - iterate over each orbit;
             - if Hrange is not None, for each orbit, iterate over Hrange.
         """
+        self.slicerName = 'MoSlicer'
         # Read orbits (inherited from MoOrbits).
         self.readOrbits(orbitfile)
+        # Read observations.
+        self.readObs(obsfile)
         # See if we're cloning orbits, and set slicer size accordingly.
         self.slicePoints = {}
         self.Hrange = Hrange
@@ -34,13 +37,12 @@ class MoSlicer(MoOrbits):
             self.slicerShape = [self.nSso, 1]
             self.slicePoints['H'] = self.orbits['H']
         self.slicePoints['orbits'] = self.orbits
-        # Set observations to None.
-        self.ssoObs = None
-        self.obsfile = None
         # Set default 'bad' value.
         self.badval = 0
         # Set default plotFuncs.
-        self.plotFuncs = [MetricVsH, MetricVsOrbit]
+        self.plotFuncs = [MetricVsH(),
+                          MetricVsOrbit(xaxis='q', yaxis='e'),
+                          MetricVsOrbit(xaxis='q', yaxis='inc')]
 
 
     def readObs(self, obsfile):
@@ -82,7 +84,7 @@ class MoSlicer(MoOrbits):
         if self.Hrange is not None:
             Hvals = self.Hrange
         else:
-            Hvals = orb['H']
+            Hvals = np.array([orb['H']], float)
         return {'obs': obs.to_records(),
                 'orbit': orb,
                 'Hvals': Hvals}

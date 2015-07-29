@@ -1,16 +1,23 @@
 import numpy as np
 
 
-__all__ = ['BaseMoMetric', 'NObsMetric', 'DiscoveryMetric',
+__all__ = ['BaseMoMetric', 'NObsMetric', 'DiscoveryChancesMetric',
            'ActivityOverTimeMetric', 'ActivityOverPeriodMetric']
 
 
 class BaseMoMetric(object):
-    def __init__(self,
+    def __init__(self, metricName=None, units='#', badval=0,
                  m5Col='fiveSigmaDepth', lossCol='dmagDetect',
                  magFilterCol='magFilter',
                  nightCol='night', expMJDCol='expMJD'):
         self.metricDtype = float
+        self.name = metricName
+        if self.name is None:
+            self.name = self.__class__.__name__.replace('Metric', '', 1)
+        self.badval = badval
+        self.units = units
+        self.comment = None
+        # Set some commonly used column names.
         self.m5Col = m5Col
         self.lossCol = lossCol
         self.magFilterCol = magFilterCol
@@ -42,7 +49,7 @@ class BaseMoMetric(object):
         Calculate the SNR of a source with appMag in an image with 'magLimit'.
         """
         xval = np.power(10, 0.5*(appMag - magLimit))
-        snr = 1.0 / np.sqrt((0.04 - gamma)*xval + gamma*xvxal*xval)
+        snr = 1.0 / np.sqrt((0.04 - gamma)*xval + gamma*xval*xval)
         return snr
 
     def _calcVis(self, appMag, magLimit, sigma=0.12):
@@ -55,7 +62,7 @@ class BaseMoMetric(object):
         """
         completeness = 1.0 / (1 + np.exp((appMag - magLimit)/sigma))
         probability = np.random.random_sample(len(appMag))
-        vis = np.where(probability <= completeness, 1, 0)
+        vis = np.where(probability <= completeness)[0]
         return vis
 
     def _prep(self, ssoObs, orb, Hval):
@@ -98,11 +105,11 @@ class NObsMetric(BaseMoMetric):
     def run(self, ssoObs, orb, Hval):
         try:
             appMag, magLimit, vis, snr = self._prep(ssoObs, orb, Hval)
-            return np.where(vis == 1)[0].size
+            return vis.size
         except ValueError:
             return 0
 
-class DiscoveryMetric(BaseMoMetric):
+class DiscoveryChancesMetric(BaseMoMetric):
     """
     Count the number of discovery opportunities for an object.
     """
@@ -116,7 +123,7 @@ class DiscoveryMetric(BaseMoMetric):
         @ snrLimit .. if snrLimit is None then uses 'completeness' calculation,
                    .. if snrLimit is not None, then uses this value as a cutoff.
         """
-        super(DiscoveryMetric, self).__init__(**kwargs)
+        super(DiscoveryChancesMetric, self).__init__(**kwargs)
         self.snrLimit = snrLimit
         self.nObsPerNight = nObsPerNight
         self.tNight = tNight
@@ -124,6 +131,7 @@ class DiscoveryMetric(BaseMoMetric):
         self.tWindow = tWindow
 
     def run(self, ssoObs, orb, Hval):
+        """SsoObs = Dataframe, orb=Dataframe, Hval=single number."""
         # Calculate visibility for this orbit at this H.
         try:
             appMag, magLimit, vis, snr = self._prep(ssoObs, orb, Hval)
@@ -185,7 +193,7 @@ class ActivityOverTimeMetric(BaseMoMetric):
     def run(self, ssoObs, orb,  Hval):
         # For cometary activity, expect activity at the same point in its orbit at the same time, mostly
         # For collisions, expect activity at random times
-        windowBins = np.arange(0, self.surveyYears*365 + window/2.0, window)
+        windowBins = np.arange(0, self.surveyYears*365 + self.window/2.0, self.window)
         nWindows = len(windowBins)
         try:
             appMag, magLimit, vis, snr = self._prep(ssoObs, orb, Hval)
@@ -217,7 +225,7 @@ class ActivityOverPeriodMetric(BaseMoMetric):
         # For collisions, expect activity at random times
         period = np.power(orb[self.aCol], 3./2.) * 365.25
         anomaly = ((ssoObs[self.expMJDCol] - orb[self.tPeriCol]) / period) % (2*np.pi)
-        binsize = 2*np.pi / float(nBins)
+        binsize = 2*np.pi / float(self.nBins)
         anomalyBins = np.arange(0, 2*np.pi + binsize/2.0, binsize)
         try:
             appMag, magLimit, vis, snr = self._prep(ssoObs, orb, Hval)
