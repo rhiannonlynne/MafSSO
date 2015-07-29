@@ -2,6 +2,10 @@ Things to do to improve code:
 
 - add summaryMetric: calculate (mean?median?identity?)X at H value
 
+- check on when/how figures are saved
+
+- check on what is saved to resultsDb
+
 - move "appMag" / SNR / VISibility calculations into stackers, which are run *at each slicepoint* (right before metrics calculated)
  (object stackers will be run then, instead of only once per gathering of data)
 
