@@ -185,10 +185,12 @@ class ActivityOverTimeMetric(BaseMoMetric):
     and reports what fraction of the total windows receive 'nObs' visits.
     """
     def __init__(self, window, snrLimit=5, surveyYears=10.0, **kwargs):
-        super(ActivityOverTimeMetric, self).__init__(**kwargs)
+        metricName = 'ActivityOver%.1fDays' %(window)
+        super(ActivityOverTimeMetric, self).__init__(metricName=metricName, **kwargs)
         self.snrLimit = snrLimit
         self.window = window
         self.surveyYears = surveyYears
+        self.units = '%f Day Windows' %(self.window)
 
     def run(self, ssoObs, orb,  Hval):
         # For cometary activity, expect activity at the same point in its orbit at the same time, mostly
@@ -219,6 +221,7 @@ class ActivityOverPeriodMetric(BaseMoMetric):
         self.tPeriCol = tPeriCol
         self.snrLimit = snrLimit
         self.nBins = nBins
+        self.units = '%d bins' %(self.nBins)
 
     def run(self, ssoObs, orb, Hval):
         # For cometary activity, expect activity at the same point in its orbit at the same time, mostly

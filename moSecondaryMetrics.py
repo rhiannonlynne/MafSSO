@@ -1,9 +1,40 @@
 import numpy as np
 import numpy.ma as ma
+import warnings
 
 from moMetrics import BaseMoMetric
 
 __all__ = ['MoCompletenessMetric', 'IntegrateOverHMetric']
+
+class IdentityAtHMetric(BaseMoMetric):
+    """
+    Return the value of a metric at a given H.
+    """
+    def __init__(self, Hmark=22, **kwargs):
+        super(IdentityAtHMetric, self).__init__(**kwargs)
+        self.Hmark = Hmark
+
+    def run(self, metricVals, Hvals):
+        # Check if desired H value is within range of H values.
+        if (self.Hmark < Hvals.min()) or (self.Hmark > Hvals.max()):
+            warnings.warn('Desired H value of metric outside range of provided H values.')
+            return None
+        mVals = metricVals.swapaxes(0, 1)
+        if len(Hvals) == len(mVals):
+            # There is a separate H value for each metric value.
+            val = np.interp([self.Hmark], Hvals, mVals)
+            result =  val[0]
+        else:
+            eps = 1e-8
+            # Hvals is an array used for each metric value,
+            #  we have to pick out the particular metricValues to use.
+            if np.any(np.abs(self.Hmark - Hvals)) < eps:
+                diff = np.abs(self.Hmark - Hvals)
+                Hidx = np.where(diff == diff.min())[0]
+                result = mVals[Hidx]
+            else:
+                raise NotImplementedError('Sorry, this needs completion. Use Hrange that includes your value for now.')
+        return result
 
 class MoCompletenessMetric(BaseMoMetric):
     """
