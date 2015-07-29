@@ -1,0 +1,15 @@
+Things to do to improve code:
+
+- add summaryMetric: calculate (mean?median?identity?)X at H value
+
+- move "appMag" / SNR / VISibility calculations into stackers, which are run *at each slicepoint* (right before metrics calculated)
+ (object stackers will be run then, instead of only once per gathering of data)
+
+- move completeness / integrateH to reduce functions
+
+- add inherit from BaseMetric to baseMoMetric
+
+- where else can we integrate mo* and base*?
+  - sqlconstraint -> constraint? (how different are pandasConstraints vs sqlconstraints?)
+  - update write method on all slicers to take metricBundle instead of individual parameters
+
