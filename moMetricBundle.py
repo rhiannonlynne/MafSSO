@@ -2,12 +2,13 @@ import os
 from copy import deepcopy
 import numpy as np
 import numpy.ma as ma
+import matplotlib.pyplot as plt
 
 from moSlicer import MoSlicer
 from moMetrics import BaseMoMetric
 import moPlots as moPlots
 import lsst.sims.maf.utils as utils
-import lsst.sims.maf.plots as plots
+from lsst.sims.maf.plots import PlotHandler, BasePlotter
 
 
 class MoMetricBundle(object):
@@ -107,12 +108,12 @@ class MoMetricBundle(object):
         Default is to use all the plotFuncs associated with a slicer.
         """
         if plotFuncs is not None:
-            if plotFuncs is isinstance(plotFuncs, plots.BasePlotter):
+            if plotFuncs is isinstance(plotFuncs, BasePlotter):
                 self.plotFuncs = [plotFuncs]
             else:
                 self.plotFuncs = []
                 for pFunc in plotFuncs:
-                    if not isinstance(pFunc, plots.BasePlotter):
+                    if not isinstance(pFunc, BasePlotter):
                         raise ValueError('plotFuncs should contain instantiated lsst.sims.maf.plotter objects.')
                     self.plotFuncs.append(pFunc)
         else:
@@ -172,7 +173,7 @@ class MoMetricBundle(object):
                 # Add summary metric info to results database, if applicable.
                 if resultsDb:
                     metricId = resultsDb.updateMetric(self.metric.name, self.slicer.slicerName,
-                                                      self.runName, self.sqlconstraint, self.metadata, None)
+                                                      self.runName, self.constraint, self.metadata, None)
                     resultsDb.updateSummaryStat(metricId, summaryName=summaryName, summaryValue=summaryVal)
 
     def plot(self, plotHandler=None, plotFunc=None, outfileSuffix=None, savefig=False):
@@ -181,10 +182,10 @@ class MoMetricBundle(object):
         """
         # Generate a plotHandler if none was set.
         if plotHandler is None:
-            plotHandler = plots.PlotHandler(savefig=savefig)
+            plotHandler = PlotHandler(savefig=savefig)
         # Make plots.
         if plotFunc is not None:
-            if isinstance(plotFunc, plots.BasePlotter):
+            if isinstance(plotFunc, BasePlotter):
                 plotFunc = plotFunc
             else:
                 plotFunc = plotFunc()
@@ -221,8 +222,9 @@ class MoMetricBundle(object):
 ####
 
 class MoMetricBundleGroup(object):
-    def __init__(self, bundleDict, outDir='.', resultsDb=None):
+    def __init__(self, bundleDict, outDir='.', resultsDb=None, verbose=True):
         # Not really handling resultsDb yet.
+        self.verbose = verbose
         self.bundleDict = bundleDict
         self.outDir = outDir
         if not os.path.isdir(self.outDir):
@@ -248,7 +250,6 @@ class MoMetricBundleGroup(object):
         """
         Calculate the metric values for set of bundles using the same constraint and slicer.
         """
-        self._setCurrent(constraint)
         self.slicer.subsetObs(constraint)
         for b in self.currentBundleDict.itervalues():
             b._setupMetricValues()
@@ -266,19 +267,80 @@ class MoMetricBundleGroup(object):
         Run all constraints and metrics for these moMetricBundles.
         """
         for constraint in self.constraints:
+            self._setCurrent(constraint)
             self.runCurrent(constraint)
-        print 'Calculated all metrics.'
+        if self.verbose:
+            print 'Calculated all metrics.'
 
-    def plotCurrent(self, constraint):
-        self._setCurrent(constraint)
+    def plotCurrent(self, savefig=True, outfileSuffix=None, figformat='pdf', dpi=600, thumbnail=True,
+                closefigs=True):
+        plotHandler = PlotHandler(outDir=self.outDir, resultsDb=self.resultsDb,
+                                  savefig=savefig, figformat=figformat, dpi=dpi, thumbnail=thumbnail)
         for b in self.currentBundleDict.itervalues():
-            b.plot()
+            b.plot(plotHandler=plotHandler, outfileSuffix=outfileSuffix, savefig=savefig)
+            if closefigs:
+                plt.close('all')
+        if self.verbose:
+            print 'Plotting complete.'
 
-    def plotAll(self):
+    def plotAll(self, savefig=True, outfileSuffix=None, figformat='pdf', dpi=600, thumbnail=True,
+                closefigs=True):
         """
         Make a few generically desired plots. This needs more flexibility in the future.
         """
         for constraint in self.constraints:
-            self.plotCurrent(constraint)
-        print 'Plotted all metrics.'
+            self._setCurrent(constraint)
+            self.plotCurrent(savefig=savefig, outfileSuffix=outfileSuffix, figformat=figformat, dpi=dpi,
+                             thumbnail=thumbnail, closefigs=closefigs)
+        if self.verbose:
+            print 'Plotted all metrics.'
 
+    def reduceCurrent(self, updateSummaries=True):
+        """
+        Run all reduce functions for the metricbundle in the currentBundleDict.
+        """
+        # Create a temporary dictionary to hold the reduced metricbundles.
+        reduceBundleDict = {}
+        for b in self.currentBundleDict.itervalues():
+            # If there are no reduce functions associated with the metric, skip this metricBundle.
+            if len(b.metric.reduceFuncs) > 0:
+                # Apply reduce functions, creating a new metricBundle in the process (new metric values).
+                for reduceFunc in b.metric.reduceFuncs.itervalues():
+                    newmetricbundle = b.reduceMetric(reduceFunc)
+                    # Add the new metricBundle to our metricBundleGroup dictionary.
+                    name = newmetricbundle.metric.name
+                    if name in self.bundleDict:
+                        name = newmetricbundle.fileRoot
+                    reduceBundleDict[name] = newmetricbundle
+                # Remove summaryMetrics from top level metricbundle if desired.
+                if updateSummaries:
+                    b.summaryMetrics = []
+        # Add the new metricBundles to the MetricBundleGroup dictionary.
+        self.bundleDict.update(reduceBundleDict)
+        # And add to to the currentBundleDict too, so we run as part of 'summaryCurrent'.
+        self.currentBundleDict.update(reduceBundleDict)
+
+    def reduceAll(self, updateSummaries=True):
+        """
+        Run the reduce methods for all metrics in bundleDict.
+        This assumes that 'clearMemory' was false.
+        """
+        for constraint in self.constraints:
+            self._setCurrent(constraint)
+            self.reduceCurrent(updateSummaries=updateSummaries)
+
+    def summaryCurrent(self):
+        """
+        Run summary statistics on all the metricBundles in currentBundleDict.
+        """
+        for b in self.currentBundleDict.itervalues():
+            b.computeSummaryStats(self.resultsDb)
+
+    def summaryAll(self):
+        """
+        Run the summary statistics for all metrics in bundleDict.
+        This assumes that 'clearMemory' was false.
+        """
+        for constraint in self.constraints:
+            self._setCurrent(constraint)
+            self.summaryCurrent()
