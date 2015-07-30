@@ -76,7 +76,9 @@ def calcCompleteness(orbitfile, obsfile, outDir):
 
 if __name__ == '__main__':
 
-    outDir = 'out'
+    outDir = 'pha_enigma_1189'
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
     orbitfile = 'pha20141031.des'
     obsfile = os.path.join(outDir, 'pha_obs.txt')
     opsimdb = 'enigma_1189_sqlite.db'
