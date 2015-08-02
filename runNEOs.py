@@ -22,17 +22,17 @@ def makeObs(orbitfile, obsfile, opsimdb, rFov, useCamera):
     # useCamera = True/False (use camera footprint)
     moObs.runMoObs(orbitfile, obsfile, opsimdb, rFov=rFov, useCamera=useCamera, tstep=2./24.)
 
-def calcCompleteness(orbitfile, obsfile, outDir):
+def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
     """
     Calculate a basic set of metrics on the NEOs, including completeness.
     Saves the plots to disk.
     """
     # Read data back from disk.
-    mos = MoSlicer(orbitfile, Hrange=np.arange(13, 26, 0.5))
+    mos = MoSlicer(orbitfile, Hrange=np.arange(15, 27, 0.25))
     mos.readObs(obsfile)
 
     # Nobs
-    metric = MoMetrics.NObsMetric()
+    metric = moMetrics.NObsMetric()
     slicer = mos
     pandasConstraint = None
     plotDict = {'nxbins':100, 'nybins':100}
@@ -41,7 +41,7 @@ def calcCompleteness(orbitfile, obsfile, outDir):
 
     # Calculate completeness. First we must calculate "DiscoveryChances".
     # Set up an example metric bundle.
-    metric = MoMetrics.DiscoveryChancesMetric()
+    metric = moMetrics.DiscoveryChancesMetric()
     slicer = mos
     pandasConstraint = None
     discovery = mmb.MoMetricBundle(metric, slicer, pandasConstraint,
@@ -60,7 +60,7 @@ def calcCompleteness(orbitfile, obsfile, outDir):
     # And we can make an 'integrated over H distribution' version.
     completenessInt = completeness.reduceMetric(completeness.metric.reduceFuncs['CumulativeH'])
 
-    Hmark = 21.0
+    Hmark = 22.0
     for c in [completeness, completenessInt]:
         summaryMetric = ValueAtHMetric(Hmark=Hmark)
         c.setSummaryMetrics(summaryMetric)
@@ -70,7 +70,7 @@ def calcCompleteness(orbitfile, obsfile, outDir):
         c.plot(plotFunc = moPlots.MetricVsH())
         plt.axvline(Hmark, color='r', linestyle=':')
         plt.axhline(c.summaryValues['Value At H=%.1f' %(Hmark)], color='r', linestyle='-')
-        plt.legend(loc=(0.9, 0.2))
+        plt.legend(loc=(0.1, 0.2))
         plt.savefig(os.path.join(outDir, c.fileRoot + '_vsH' + '.png'), format='png')
 
 
@@ -82,9 +82,14 @@ if __name__ == '__main__':
     orbitfile = 'pha20141031.des'
     obsfile = os.path.join(outDir, 'pha_obs.txt')
     opsimdb = 'enigma_1189_sqlite.db'
+    runName = 'enigma_1189'
+    metadata = None
     rFov = np.radians(1.75)
     useCamera = True
 
-    makeObs(orbitfile, obsfile, opsimdb, rFov, useCamera)
-    calcCompleteness(orbitfile, obsfile, outDir)
+
+    makeObs = False
+    if makeObs:
+        makeObs(orbitfile, obsfile, opsimdb, rFov, useCamera)
+    calcCompleteness(orbitfile, obsfile, outDir, runName, metadata)
     print "All Done!"
