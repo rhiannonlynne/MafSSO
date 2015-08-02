@@ -75,7 +75,10 @@ class MoSlicer(MoOrbits):
         # Find the matching orbit.
         orb = self.orbits.iloc[idx]
         # Find the matching observations.
-        obs = self.obs.query('objId == %d' %(orb['objId']))
+        if self.obs['objId'].dtype == 'object':
+            obs = self.obs.query('objId == "%s"' %(orb['objId']))
+        else:
+            obs = self.obs.query('objId == %d' %(orb['objId']))
         # Return the values for H to consider for metric.
         if self.Hrange is not None:
             Hvals = self.Hrange

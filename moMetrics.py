@@ -4,6 +4,7 @@ import numpy.ma as ma
 from lsst.sims.maf.metrics import MetricRegistry
 
 __all__ = ['BaseMoMetric', 'NObsMetric', 'DiscoveryChancesMetric',
+           'NNightsMetric', 'ObsArcMetric',
            'ActivityOverTimeMetric', 'ActivityOverPeriodMetric']
 
 
@@ -147,6 +148,50 @@ class NObsMetric(BaseMoMetric):
             return vis.size
         except ValueError:
             return 0
+
+
+class NNightsMetric(BaseMoMetric):
+    """
+    Count the number of distinct nights an object is observed.
+    """
+    def __init__(self, snrLimit=None, **kwargs):
+        """
+        @ snrLimit : if SNRlimit is None, this uses _calcVis method/completeness
+                     else if snrLimit is not None, it uses that value as a cutoff.
+        """
+        super(NNightsMetric, self).__init__(**kwargs)
+        self.snrLimit = snrLimit
+
+    def run(self, ssoObs, orb, Hval):
+        try:
+            appMag, magLimit, vis, snr = self._prep(ssoObs, orb, Hval)
+        except ValueError:
+            return 0
+        if len(vis) > 0:
+            nights = len(np.unique(ssoObs[self.nightCol][vis]))
+        else:
+            nights = 0
+        return nights
+
+class ObsArcMetric(BaseMoMetric):
+    """
+    Calculate the difference between the first and last observation of an object.
+    """
+    def __init__(self, snrLimit=None, **kwargs):
+        super(ObsArcMetric, self).__init__(**kwargs)
+        self.snrLimit = snrLimit
+
+    def run(self, ssoObs, orb, Hval):
+        try:
+            appMag, magLimit, vis, snr = self._prep(ssoObs, orb, Hval)
+        except ValueError:
+            return 0
+        if len(vis) > 0:
+            arc = ssoObs[self.expMJDCol][vis].max() - ssoObs[self.expMJDCol][vis].min()
+        else:
+            arc = 0
+        return arc
+
 
 class DiscoveryChancesMetric(BaseMoMetric):
     """
