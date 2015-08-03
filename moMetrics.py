@@ -3,8 +3,9 @@ import numpy as np
 import numpy.ma as ma
 from lsst.sims.maf.metrics import MetricRegistry
 
-__all__ = ['BaseMoMetric', 'NObsMetric', 'DiscoveryChancesMetric',
+__all__ = ['BaseMoMetric', 'NObsMetric', 'NObsNoSinglesMetric',
            'NNightsMetric', 'ObsArcMetric',
+           'DiscoveryChancesMetric',
            'ActivityOverTimeMetric', 'ActivityOverPeriodMetric']
 
 
@@ -148,6 +149,26 @@ class NObsMetric(BaseMoMetric):
             return vis.size
         except ValueError:
             return 0
+
+
+class NObsNoSinglesMetric(BaseMoMetric):
+    """
+    Count the number of observations for an object, but don't
+    include any observations where it was a single observation on a night.
+    """
+    def __init__(self, snrLimit=None, **kwargs):
+        super(NObsNoSinglesMetric, self).__init__(**kwargs)
+        self.snrLimit = snrLimit
+
+    def run(self, ssoObs, orb, Hval):
+        try:
+            appMag, magLimit, vis, snr = self._prep(ssoObs, orb, Hval)
+        except ValueError:
+            return 0
+        nights = ssoObs[self.nightCol][vis]
+        ncounts = np.bincount(nights)
+        nobs = ncounts[np.where(ncounts >= 1)].sum()
+        return nobs
 
 
 class NNightsMetric(BaseMoMetric):
@@ -314,8 +335,9 @@ class ActivityOverTimeMetric(BaseMoMetric):
     Splits observations into time periods set by 'window', then looks for observations within each window,
     and reports what fraction of the total windows receive 'nObs' visits.
     """
-    def __init__(self, window, snrLimit=5, surveyYears=10.0, **kwargs):
-        metricName = 'ActivityOver%.1fDays' %(window)
+    def __init__(self, window, snrLimit=5, surveyYears=10.0, metricName=None, **kwargs):
+        if metricName is None:
+            metricName = 'Chance of detecting activity lasting %.0f days' %(window)
         super(ActivityOverTimeMetric, self).__init__(metricName=metricName, **kwargs)
         self.snrLimit = snrLimit
         self.window = window
@@ -345,8 +367,10 @@ class ActivityOverPeriodMetric(BaseMoMetric):
     observations, in order to have a chance to detect activity.
     """
     def __init__(self, window, snrLimit=5, nBins=10,
-                 aCol='a', tPeriCol='tPeri', **kwargs):
-        super(ActivityOverPeriodMetric, self).__init(**kwargs)
+                 aCol='a', tPeriCol='tPeri', metricName=None, **kwargs):
+        if metricName is None:
+            metricName = 'Chance of detecting activity in %.1f of the orbit' %(window)
+        super(ActivityOverPeriodMetric, self).__init(metricName=metricName, **kwargs)
         self.aCol = aCol
         self.tPeriCol = tPeriCol
         self.snrLimit = snrLimit
