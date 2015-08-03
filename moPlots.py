@@ -6,6 +6,9 @@ from matplotlib.collections import PatchCollection
 
 from lsst.sims.maf.plots import BasePlotter
 
+mag_sun = -27.1 # apparent r band magnitude of the sun. this sets the band for the magnitude limit.
+# see http://www.ucolick.org/~cnaw/sun.html for apparent magnitudes in other bands.
+km_per_au = 1.496e8
 
 class MetricVsH(BasePlotter):
     """
@@ -16,7 +19,7 @@ class MetricVsH(BasePlotter):
         self.plotType = 'MetricVsH'
         self.objectPlotter = False
         self.defaultPlotDict = {'title':None, 'xlabel':'H (mag)', 'ylabel':None, 'label':None,
-                                'linestyle':'-', 'npReduce':None, 'nbins':None}
+                                'linestyle':'-', 'npReduce':None, 'nbins':None, 'albedo':None}
         self.minHrange=1.0
 
     def __call__(self, metricValue, slicer, userPlotDict, fignum=None):
@@ -61,7 +64,20 @@ class MetricVsH(BasePlotter):
             Hvals = bins
         plt.plot(Hvals, mVals, color=plotDict['color'], linestyle=plotDict['linestyle'],
                 label=plotDict['label'])
-        plt.title(plotDict['title'])
+        # Convert Hvals to diameter, using 'albedo'
+        albedo = plotDict['albedo']
+        y = 1.0
+        if albedo is not None:
+            diameter = 2.0 * np.sqrt(10**((mag_sun - Hvals - 2.5*np.log10(albedo))/2.5))
+            diameter = diameter * km_per_au
+            ax = plt.axes()
+            ax2 = ax.twiny()
+            ax2.semilogx(diameter, mVals, alpha=0)
+            ax2.set_xlim(diameter[0], diameter[-1])
+            ax2.set_xlabel('D (km)', labelpad=-10, horizontalalignment='right')
+            plt.sca(ax)
+            y = 1.1
+        plt.title(plotDict['title'], y=y)
         plt.xlabel(plotDict['xlabel'])
         plt.ylabel(plotDict['ylabel'])
         if 'xMin' in plotDict:
@@ -117,12 +133,19 @@ class MetricVsOrbit(BasePlotter):
         Hwidth = plotDict['Hwidth']
         if Hwidth is None:
             Hwidth = 1.0
-        if plotDict['Hval'] is None:
-            if len(Hvals) == slicer.slicerShape[1]:
+        if len(Hvals) == slicer.slicerShape[1]:
+            if plotDict['Hval'] is None:
                 Hidx = len(Hvals) / 2
                 Hval = Hvals[Hidx]
             else:
+                Hval = plotDict['Hval']
+                Hidx = np.where(np.abs(Hvals - Hval) == np.abs(Hvals - Hval).min())[0]
+        else:
+            if plotDict['Hval'] is None:
                 Hval = np.median(Hvals)
+                Hidx = np.where(np.abs(Hvals - Hval) <= Hwidth/2.0)[0]
+            else:
+                Hval = plotDict['Hvals']
                 Hidx = np.where(np.abs(Hvals - Hval) <= Hwidth/2.0)[0]
         if len(Hvals) == slicer.slicerShape[1]:
             mVals = np.swapaxes(metricValue, 1, 0)[Hidx].filled()
