@@ -101,7 +101,7 @@ class MoOrbits(object):
 
         # And some columns that can be generated from the input data we do have.
         if 'a' not in colMap:
-            aval = orbits[colMap['q']] / (1 + orbits[colMap['e']])
+            aval = orbits[colMap['q']] / (1 - orbits[colMap['e']])
         else:
             aval = orbits[colMap['a']]
         period = np.sqrt(aval**3)
