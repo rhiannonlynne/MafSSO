@@ -65,25 +65,29 @@ class MetricVsH(BasePlotter):
         plt.plot(Hvals, mVals, color=plotDict['color'], linestyle=plotDict['linestyle'],
                 label=plotDict['label'])
         # Convert Hvals to diameter, using 'albedo'
+        if 'xMin' in plotDict:
+            plt.xlim(xmin = plotDict['xMin'])
+        if 'xMax' in plotDict:
+            plt.xlim(xmax = plotDict['xMax'])
         albedo = plotDict['albedo']
         y = 1.0
         if albedo is not None:
-            diameter = 2.0 * np.sqrt(10**((mag_sun - Hvals - 2.5*np.log10(albedo))/2.5))
-            diameter = diameter * km_per_au
             ax = plt.axes()
             ax2 = ax.twiny()
-            ax2.semilogx(diameter, mVals, alpha=0)
-            ax2.set_xlim(diameter[0], diameter[-1])
+            Hmin, Hmax = ax.get_xlim()
+            dmax = 2.0 * np.sqrt(10**((mag_sun - Hmin - 2.5*np.log10(albedo))/2.5))
+            dmin = 2.0 * np.sqrt(10**((mag_sun - Hmax - 2.5*np.log10(albedo))/2.5))
+            dmax = dmax * km_per_au
+            dmin = dmin * km_per_au
+            ax2.set_xlim(dmax, dmin)
+            ax2.set_xscale('log')
             ax2.set_xlabel('D (km)', labelpad=-10, horizontalalignment='right')
             plt.sca(ax)
             y = 1.1
         plt.title(plotDict['title'], y=y)
         plt.xlabel(plotDict['xlabel'])
         plt.ylabel(plotDict['ylabel'])
-        if 'xMin' in plotDict:
-            plt.xlim(xmin = plotDict['xMin'])
-        if 'xMax' in plotDict:
-            plt.xlim(xmax = plotDict['xMax'])
+        plt.tight_layout()
         return fig.number
 
 
@@ -140,6 +144,7 @@ class MetricVsOrbit(BasePlotter):
             else:
                 Hval = plotDict['Hval']
                 Hidx = np.where(np.abs(Hvals - Hval) == np.abs(Hvals - Hval).min())[0]
+                Hidx = Hidx[0]
         else:
             if plotDict['Hval'] is None:
                 Hval = np.median(Hvals)
@@ -181,6 +186,10 @@ class MetricVsOrbit(BasePlotter):
         plt.contourf(xi, yi, binvals, levels, extend='max',
                      zorder=0, cmap=plotDict['cmap'])
         cbar = plt.colorbar()
+        label = plotDict['label']
+        if label is None:
+            label = ''
+        cbar.set_label(label + ' @ H=%.1f' %(Hval))
         plt.title(plotDict['title'])
         plt.xlabel(plotDict['xlabel'])
         plt.ylabel(plotDict['ylabel'])
