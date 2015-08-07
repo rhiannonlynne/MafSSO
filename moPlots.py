@@ -19,10 +19,12 @@ class MetricVsH(BasePlotter):
         self.plotType = 'MetricVsH'
         self.objectPlotter = False
         self.defaultPlotDict = {'title':None, 'xlabel':'H (mag)', 'ylabel':None, 'label':None,
-                                'linestyle':'-', 'npReduce':None, 'nbins':None, 'albedo':None}
+                                'npReduce':None, 'nbins':None, 'albedo':None}
         self.minHrange=1.0
 
     def __call__(self, metricValue, slicer, userPlotDict, fignum=None):
+        if 'linestyle' not in userPlotDict:
+            userPlotDict['linestyle'] = '-'
         fig = plt.figure(fignum)
         plotDict = {}
         plotDict.update(self.defaultPlotDict)
@@ -64,11 +66,15 @@ class MetricVsH(BasePlotter):
             Hvals = bins
         plt.plot(Hvals, mVals, color=plotDict['color'], linestyle=plotDict['linestyle'],
                 label=plotDict['label'])
-        # Convert Hvals to diameter, using 'albedo'
         if 'xMin' in plotDict:
             plt.xlim(xmin = plotDict['xMin'])
         if 'xMax' in plotDict:
             plt.xlim(xmax = plotDict['xMax'])
+        if 'yMin' in plotDict:
+            plt.ylim(ymin = plotDict['yMin'])
+        if 'yMax' in plotDict:
+            plt.ylim(ymax = plotDict['yMax'])
+        # Convert Hvals to diameter, using 'albedo'
         albedo = plotDict['albedo']
         y = 1.0
         if albedo is not None:
@@ -97,7 +103,7 @@ class MetricVsOrbit(BasePlotter):
     Marginalize over metric values in each orbital bin using 'npReduce'.
     """
     def __init__(self, xaxis='q', yaxis='e'):
-        self.plotType = 'MetricVsOrbit'
+        self.plotType = 'MetricVsOrbit_%s%s' %(xaxis, yaxis)
         self.objectPlotter = False
         self.defaultPlotDict = {'title':None, 'xlabel':xaxis, 'ylabel':yaxis,
                                 'xaxis':xaxis, 'yaxis':yaxis,
