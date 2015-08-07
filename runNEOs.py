@@ -87,26 +87,29 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Python script to run MAF NEO completeness analysis')
     parser.add_argument('dbFile', type=str, default=None,help="full file path to the opsim sqlite file")
     parser.add_argument('--orbitfile', type=str, default='pha20141031.des', help="full file path to the orbit file")
-    parser.add_argument("--outDir",type=str, default='./Out', help='Output directory for MAF outputs. Default "Out"')
+    parser.add_argument("--outDir",type=str, default=None, help='Output directory for MAF outputs. Default opsimdb_orbitroot')
     parser.add_argument('--plotOnly', dest='plotOnly', action='store_true',
                         default=False, help="Reload the metric values from disk and re-plot them.")
     parser.set_defaults()
     args, extras = parser.parse_known_args()
 
-    outDir = args.outDir
-    if not os.path.isdir(outDir):
-        os.makedirs(outDir)
     orbitfile = args.orbitfile
-    orbitroot = orbitfile.replace('.txt', '').replace('.des', '').replace('.dat', '')
-    obsfile = os.path.join(outDir, orbitroot + '_allObs.txt')
+    orbitroot = os.path.split(orbitfile)[-1].replace('.txt', '').replace('.des', '').replace('.dat', '')
+    obsfile = orbitroot + '_allObs.txt'
     opsimdb = args.dbFile
     runName = os.path.split(opsimdb)[-1].replace('_sqlite.db', '')
     metadata = '%s' %(orbitroot)
     rFov = np.radians(1.75)
     useCamera = True
 
+    outDir = args.outDir
+    if outDir is None:
+        outDir = runName + '_' + orbitroot
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
+
     if not args.plotOnly:
-        makeObs(orbitfile, obsfile, opsimdb, rFov, useCamera)
+        makeObs(orbitfile, os.path.join(outDir, obsfile), opsimdb, rFov, useCamera)
         print 'Made observations'
-    calcCompleteness(orbitfile, obsfile, outDir, runName, metadata)
+    calcCompleteness(orbitfile, os.path.join(outDir, obsfile), outDir, runName, metadata)
     print "All Done!"
