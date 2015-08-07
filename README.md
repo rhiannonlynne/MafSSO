@@ -9,8 +9,8 @@ package will go away. Other improvements anticipated at that time include improv
 In general, things should look pretty much the same, but hopefully just easier to use.
 
 Requirements:
--sims_maf (preferably v2.0+)
--oorb
+* sims_maf (preferably v2.0+)
+* oorb
 
 Install sims_maf however you would prefer (the easiest thing to do is to use anaconda + conda to install the binaries - should be about a 30 minute job).
 Here are more [instructions](https://github.com/LSST-nonproject/sims_maf_contrib/blob/master/tutorials/Index.ipynb) on installing sims_maf.
