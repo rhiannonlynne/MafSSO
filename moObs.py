@@ -477,7 +477,7 @@ def runMoObs(orbitfile, outfileName, opsimfile,
         ndays = 3650.0
         sqlconstraint = ''
     simdata = opsdb.fetchMetricData(dbcols, sqlconstraint=sqlconstraint)
-    print "Queried data from opsim %s, fetched %f days worth of visits." %(opsimfile, ndays/365.)
+    print "Queried data from opsim %s, fetched %f years worth of visits." %(opsimfile, ndays/365.)
 
     moogen.setTimes(timestep=tstep, ndays=ndays, timestart=simdata['expMJD'].min())
     print "Will generate ephemerides on grid of %f day timesteps, then extrapolate to opsim times." %(tstep)
