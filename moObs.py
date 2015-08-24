@@ -149,7 +149,8 @@ class MoObs(MoOrbits):
         @ timestart : starting time of ephemerides (MJD)
         """
         # Extend times beyond first/last observation, so that interpolation doesn't fail
-        timestart = timestart - timestep
+        timestep = float(timestep)
+        timestart = float(timestart) - timestep
         timeend = timestart + ndays + timestep
         times = np.arange(timestart, timeend + timestep/2.0, timestep)
         # For pyoorb, we need to tag times with timescales;
@@ -254,7 +255,7 @@ class MoObs(MoOrbits):
         if byObject:
             ephs = np.swapaxes(ephs, 2, 1)
             velocity = np.swapaxes(velocity, 1, 0)
-        # Create a numpy recarray. We're deviating from the DataFrame here probably mostly due to history.
+        # Create a numpy recarray. (not using a dAtaframe here, because the numpy recarray is just easier to swap around later).
         ephs = np.rec.fromarrays([ephs[0], ephs[1], ephs[2], ephs[3], ephs[4],
                                   ephs[6], ephs[7], ephs[8], ephs[9], velocity],
                                   names=['delta', 'ra', 'dec', 'magV', 'time', 'dradt',
