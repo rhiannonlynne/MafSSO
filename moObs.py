@@ -39,14 +39,14 @@ class MoOrbits(object):
     def readOrbits(self, orbitfile):
         """
         Read the orbits from file 'orbitfile', generating a numpy structured array with the columns:
-        'objID q e inc node argPeri tPeri epoch H g a meanAnom'
+        'objID q e inc node argPeri tPeri epoch H g a meanAnom sed_filename'
         """
         self.orbitfile = orbitfile
         orbits = pd.read_table(orbitfile, delim_whitespace=True)
         # Normalize the column names, as different inputs tend to have some commonly-different names.
         ssoCols = orbits.columns.values.tolist()
         nSso = len(orbits)
-        outCols = ['objId', 'q', 'e', 'inc', 'node', 'argPeri', 'tPeri', 'epoch', 'H', 'g', 'a', 'meanAnom']
+        outCols = ['objId', 'q', 'e', 'inc', 'node', 'argPeri', 'tPeri', 'epoch', 'H', 'g', 'a', 'meanAnom', 'sed_filename']
         # Create mapping between column names read from disk and desired column names.
         colMap = {}
         for o in outCols:
@@ -73,10 +73,10 @@ class MoOrbits(object):
                     alternatives = ['t_0']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'H':
-                    alternatives = ['magH', 'magHv', 'Hv']
+                    alternatives = ['magH', 'magHv', 'Hv', 'H_v']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'g':
-                    alternatives = ['phaseV', 'phase', 'gV']
+                    alternatives = ['phaseV', 'phase', 'gV', 'phase_g']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'a':
                     alternatives = ['semimajor']
@@ -98,6 +98,10 @@ class MoOrbits(object):
             gval = np.zeros(nSso) + 0.15
         else:
             gval = orbits[colMap['g']]
+        if 'sed_filename' not in colMap:
+            sedvals = np.array(zip(repeat('C.dat', nSso)))
+        else:
+            sedvals = orbits[colMap['sed_filename']]
 
         # And some columns that can be generated from the input data we do have.
         if 'a' not in colMap:
@@ -130,7 +134,8 @@ class MoOrbits(object):
                                     'H':Hval,
                                     'g':gval,
                                     'a':aval,
-                                    'M':meanAnomval})
+                                    'M':meanAnomval,
+                                    'sed_filename':sedvals})
         self.ssoIds = np.unique(self.orbits['objId'])
         self.nSso = len(self.ssoIds)
 
@@ -486,7 +491,7 @@ def runMoObs(orbitfile, outfileName, opsimfile,
     for i, sso in moogen.orbits.iterrows():
         ephs = moogen.generateEphs(sso)
         interpfuncs = moogen.interpolateEphs(ephs)
-        idxObs = moogen.ssoInFov(interpfuncs, simdata, rFov=rFov, useCamera=useCamera)
+        idxObs = moogen.ssoInFov(interpfuncs, simdata, sedname=sso['sed_filename'], rFov=rFov, useCamera=useCamera)
         moogen.writeObs(sso['objId'], interpfuncs, simdata, idxObs, outfileName=outfileName)
     print "Wrote output observations to file %s" %(outfileName)
 
