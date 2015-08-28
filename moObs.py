@@ -123,6 +123,7 @@ class MoOrbits(object):
             tPerival = orbits[colMap['tPeri']]
 
         # Put it all together into a dataframe.
+        # Note that parameters which have angular units should be in degrees here.
         self.orbits = pd.DataFrame({'objId':orbids,
                                     'q':qval,
                                     'e':orbits[colMap['e']],
@@ -146,20 +147,29 @@ class MoObs(MoOrbits):
     Inherits from moOrbits (in order to read and save orbits).
     """
 
-    def setTimes(self, timestep=1., ndays=1., timestart=49353.):
+    def setTimesRange(self, timeStep=1., timeStart=49353., timeEnd=453003.):
         """
-        Generate and return an array for oorb of the ephemeris times desired.
-        @ timestep : timestep for ephemeris generation (days)
-        @ ndays    : number of days to generate ephemerides for (days)
-        @ timestart : starting time of ephemerides (MJD)
+        Set an array for oorb of the ephemeris times desired, given the range of values.
+        @ timeStep : timestep for ephemeris generation (days)
+        @ timeStart : starting time of ephemerides (MJD)
+        @ timeEnd : ending time of ephemerides (MJD)
         """
         # Extend times beyond first/last observation, so that interpolation doesn't fail
-        timestart = timestart - timestep
-        timeend = timestart + ndays + timestep
-        times = np.arange(timestart, timeend + timestep/2.0, timestep)
+        timeStep = float(timeStep)
+        timeStart = timeStart - timeStep
+        timeEnd = timeEnd + timeStep
+        times = np.arange(timeStart, timeEnd + timeStep/2.0, timeStep)
         # For pyoorb, we need to tag times with timescales;
         # 1= MJD_UTC, 2=UT1, 3=TT, 4=TAI
         self.ephTimes = np.array(zip(times, repeat(4, len(times))), dtype='double', order='F')
+
+    def setTimes(self, times):
+        """
+        Set an array for oorb of the ephemeris times desired, given an explicit set of times.
+        @ times : numpy array of the actual times of each ephemeris position.
+        """
+        self.ephTimes = np.array(zip(times, repeat(4, len(time))), dtype='double', order='F')
+
 
     def _packOorbElem(self, sso=None):
         """
@@ -266,7 +276,7 @@ class MoObs(MoOrbits):
                                          'ddecdt', 'phase', 'solarelon','velocity'])
         return ephs
 
-    def generateEphs(self, sso=None, ephTimes=None):
+    def generateEphs(self, sso=None):
         """
         Combines several private methods to pack and unpack oorb-format orbital elements and ephemerides,
         into a single easy-access point to generate numpy arrays of ephemerides.
@@ -276,7 +286,7 @@ class MoObs(MoOrbits):
         if sso is None:
             sso = self.orbits
         oorbelems = self._packOorbElem(sso=sso)
-        oorbephs = self._generateOorbEphs(oorbelems, ephTimes=ephTimes)
+        oorbephs = self._generateOorbEphs(oorbelems)
         ephs = self._unpackOorbEphs(oorbephs, byObject=True)
         return ephs
 
@@ -347,9 +357,9 @@ class MoObs(MoOrbits):
             self.lsst
         except AttributeError:
             filterdir = os.getenv('LSST_THROUGHPUTS_BASELINE')
-            filterlist = ('u', 'g', 'r', 'i', 'z', 'y')
+            self.filterlist = ('u', 'g', 'r', 'i', 'z', 'y')
             self.lsst ={}
-            for f in filterlist:
+            for f in self.filterlist:
                 self.lsst[f] = Bandpass()
                 self.lsst[f].readThroughput(os.path.join(filterdir, 'total_'+f+'.dat'))
             self.vband = Bandpass()
@@ -361,7 +371,7 @@ class MoObs(MoOrbits):
             moSed.readSED_flambda(sedname)
             vmag = moSed.calcMag(self.vband)
             self.colors[sedname] = {}
-            for f in filterlist:
+            for f in self.filterlist:
                 self.colors[sedname][f] = moSed.calcMag(self.lsst[f]) - vmag
         return self.colors[sedname]
 
@@ -448,7 +458,7 @@ class MoObs(MoOrbits):
 ## Function to link the above class methods to generate an output file with moving object observations.
 
 def runMoObs(orbitfile, outfileName, opsimfile,
-            dbcols=None, tstep=2./24., nyears=None,
+            dbcols=None, tstep=2./24., sqlconstraint='',
             rFov=np.radians(1.75), useCamera=True):
 
     from lsst.sims.maf.db import OpsimDatabase
@@ -475,26 +485,20 @@ def runMoObs(orbitfile, outfileName, opsimfile,
         for col in reqcols:
             if col not in dbcols:
                 dbcols.append(col)
-    if nyears is not None:
-        ndays = nyears * 365
-        sqlconstraint = 'night<%d' %(ndays)
-    else:
-        ndays = 3650.0
-        sqlconstraint = ''
     simdata = opsdb.fetchMetricData(dbcols, sqlconstraint=sqlconstraint)
-    print "Queried data from opsim %s, fetched %f years worth of visits." %(opsimfile, ndays/365.)
+    print "Queried data from opsim %s, fetched %d visits." %(opsimfile, len(simdata['expMJD']))
 
-    moogen.setTimes(timestep=tstep, ndays=ndays, timestart=simdata['expMJD'].min())
+    moogen.setTimesRange(timeStep=tstep, timeStart=simdata['expMJD'].min(), timeEnd=simdata['expMJD'].max())
     print "Will generate ephemerides on grid of %f day timesteps, then extrapolate to opsim times." %(tstep)
 
     moogen.setupOorb()
     for i, sso in moogen.orbits.iterrows():
         ephs = moogen.generateEphs(sso)
         interpfuncs = moogen.interpolateEphs(ephs)
-        idxObs = moogen.ssoInFov(interpfuncs, simdata, sedname=sso['sed_filename'], rFov=rFov, useCamera=useCamera)
-        moogen.writeObs(sso['objId'], interpfuncs, simdata, idxObs, outfileName=outfileName)
+        idxObs = moogen.ssoInFov(interpfuncs, simdata, rFov=rFov, useCamera=useCamera)
+        moogen.writeObs(sso['objId'], interpfuncs, simdata, idxObs,  sedname=sso['sed_filename'],  outfileName=outfileName)
     print "Wrote output observations to file %s" %(outfileName)
 
 # Test example:
 if __name__ == '__main__':
-    runMoObs('pha20141031.des', 'test_allObs.txt', 'enigma_1189_sqlite.db', nyears=1)
+    runMoObs('pha20141031.des', 'test_allObs.txt', 'enigma_1189_sqlite.db', sqlconstraint='night<365')
