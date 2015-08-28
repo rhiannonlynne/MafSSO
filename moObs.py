@@ -269,7 +269,7 @@ class MoObs(MoOrbits):
         if byObject:
             ephs = np.swapaxes(ephs, 2, 1)
             velocity = np.swapaxes(velocity, 1, 0)
-        # Create a numpy recarray. We're deviating from the DataFrame here probably mostly due to history.
+        # Create a numpy recarray. (not using a dAtaframe here, because the numpy recarray is just easier to swap around later).
         ephs = np.rec.fromarrays([ephs[0], ephs[1], ephs[2], ephs[3], ephs[4],
                                   ephs[6], ephs[7], ephs[8], ephs[9], velocity],
                                   names=['delta', 'ra', 'dec', 'magV', 'time', 'dradt',
