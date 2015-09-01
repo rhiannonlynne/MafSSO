@@ -99,7 +99,8 @@ class MoOrbits(object):
         else:
             gval = orbits[colMap['g']]
         if 'sed_filename' not in colMap:
-            sedvals = np.array(zip(repeat('C.dat', nSso)))
+            sedvals = [sed for sed in repeat('C.dat', nSso)]
+            sedvals = np.array(sedvals)
         else:
             sedvals = orbits[colMap['sed_filename']]
 

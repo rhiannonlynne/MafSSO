@@ -84,6 +84,7 @@ class MoSlicer(MoOrbits):
             Hvals = self.Hrange
         else:
             Hvals = np.array([orb['H']], float)
+        # Note that ssoObs / obs is a recarray not Dataframe!
         return {'obs': obs.to_records(),
                 'orbit': orb,
                 'Hvals': Hvals}

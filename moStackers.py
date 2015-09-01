@@ -1,5 +1,5 @@
 import numpy as np
-
+from lsst.sims.maf.stackers import BaseStacker
 
 class AppMagStacker(object):
     """
