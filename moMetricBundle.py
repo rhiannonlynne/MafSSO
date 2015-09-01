@@ -251,7 +251,7 @@ class MoMetricBundleGroup(object):
         """
         Calculate the metric values for set of bundles using the same constraint and slicer.
         """
-        allStackers = moStackers.AllStackers()
+        #allStackers = moStackers.AllStackers()
         self.slicer.subsetObs(constraint)
         for b in self.currentBundleDict.itervalues():
             b._setupMetricValues()
@@ -259,7 +259,7 @@ class MoMetricBundleGroup(object):
             ssoObs = slicePoint['obs']
             for j, Hval in enumerate(slicePoint['Hvals']):
                 # Run stackers to add extra columns (that depend on H)
-                ssoObs = allStackers.run(ssoObs, slicePoint['orbit']['H'], Hval)
+                #ssoObs = allStackers.run(ssoObs, slicePoint['orbit']['H'], Hval)
                 for b in self.currentBundleDict.itervalues():
                     if len(ssoObs) == 0:
                         b.metricValues.mask[i][j] = True

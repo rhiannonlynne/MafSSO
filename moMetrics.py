@@ -5,7 +5,7 @@ from lsst.sims.maf.metrics import MetricRegistry
 
 __all__ = ['BaseMoMetric', 'NObsMetric', 'NObsNoSinglesMetric',
            'NNightsMetric', 'ObsArcMetric',
-           'DiscoveryChancesMetric',
+           'DiscoveryChancesMetric', 'FirstDiscoveryConditionsMetric',
            'ActivityOverTimeMetric', 'ActivityOverPeriodMetric']
 
 
@@ -18,7 +18,7 @@ class BaseMoMetric(object):
                  magFilterCol='magFilter',
                  nightCol='night', expMJDCol='expMJD',
                  Hindex = 0.3):
-        self.metricDtype = float
+        self.metricDtype = 'float'
         self.name = metricName
         if self.name is None:
             self.name = self.__class__.__name__.replace('Metric', '', 1)
@@ -326,6 +326,88 @@ class DiscoveryChancesMetric(BaseMoMetric):
             completeness.data[0] = n_found.astype(float) / n_all.astype(float)
             completeness.mask[0] = np.where(n_all==0, True, False)
         return completeness, Hvals
+
+
+class FirstDiscoveryConditionsMetric(BaseMoMetric):
+    """
+    Count the number of discovery opportunities for an object.
+    """
+    def __init__(self, nObsPerNight=2, tNight=90.*60.,
+                 nNightsPerWindow=3, tWindow=15, snrLimit=None,
+                 raCol='ra', decCol='dec',
+                 **kwargs):
+        """
+        @ nObsPerNight = number of observations per night required for tracklet
+        @ tNight = max time start/finish for the tracklet (seconds)
+        @ nNightsPerWindow = number of nights with observations required for track
+        @ tWindow = max number of nights in track (days)
+        @ snrLimit .. if snrLimit is None then uses 'completeness' calculation,
+                   .. if snrLimit is not None, then uses this value as a cutoff.
+
+        Parameters for reduce method (Completeness)
+        @ nBins = number of bins to split "H" into, if not using cloned H distribution.
+        """
+        super(FirstDiscoveryConditionsMetric, self).__init__(**kwargs)
+        self.snrLimit = snrLimit
+        self.nObsPerNight = nObsPerNight
+        self.tNight = tNight
+        self.nNightsPerWindow = nNightsPerWindow
+        self.tWindow = tWindow
+        # If H is not a cloned distribution, then we need to specify how to bin these values.
+        self.nbins = 20
+        self.minHrange = 1.0
+        self.raCol = raCol
+        self.decCol = decCol
+        self.metricDtype = 'object'
+
+    def run(self, ssoObs, orb, Hval):
+        """SsoObs = Dataframe, orb=Dataframe, Hval=single number."""
+        # Calculate visibility for this orbit at this H.
+        try:
+            appMag, magLimit, vis, snr = self._prep(ssoObs, orb, Hval)
+        except ValueError:
+            return None
+        # Calculate number of discovery chances.
+        discoveryObs = [-999, 0, 0, -99]
+        if len(vis) > 0:
+            # Now to identify where observations meet the timing requirements.
+            #  Identify visits where the 'night' changes.
+            visSort = np.argsort(ssoObs[self.nightCol])[vis]
+            n = np.unique(ssoObs[self.nightCol][visSort])
+            # Identify all the indexes where the night changes (swap from one night to next)
+            nIdx = np.searchsorted(ssoObs[self.nightCol][visSort], n)
+            # Add index pointing to last observation.
+            nIdx = np.concatenate([nIdx, np.array([len(visSort)-1])])
+            # Find the nights & indexes where there were more than nObsPerNight observations.
+            obsPerNight = (nIdx - np.roll(nIdx, 1))[1:]
+            nWithXObs = n[np.where(obsPerNight >= self.nObsPerNight)]
+            nIdxMany = np.searchsorted(ssoObs[self.nightCol][visSort], nWithXObs)
+            nIdxManyEnd = np.searchsorted(ssoObs[self.nightCol][visSort], nWithXObs, side='right') - 1
+            # Check that nObsPerNight observations are within tNight
+            timesStart = ssoObs[self.expMJDCol][visSort][nIdxMany]
+            timesEnd = ssoObs[self.expMJDCol][visSort][nIdxManyEnd]
+            # Identify the nights where the total time interval may exceed tNight
+            # (but still have a subset of nObsPerNight which are within tNight)
+            check = np.where((timesEnd - timesStart > self.tNight) &
+                             (nIdxManyEnd + 1 - nIdxMany > self.nObsPerNight))[0]
+            bad = []
+            for i, j, c in zip(visSort[nIdxMany][check], visSort[nIdxManyEnd][check], check):
+                t = ssoObs[self.expMJDCol][i:j+1]
+                dtimes = (np.roll(t, 1-nObsPerNight) - t)[:-1]
+                if np.all(dtimes > self.tNight+eps):
+                    bad.append(c)
+            goodIdx = np.delete(visSort[nIdxMany], bad)
+            # Now (with indexes of start of 'good' nights with nObsPerNight within tNight),
+            # look at the intervals between 'good' nights (for tracks)
+            dnights = (np.roll(ssoObs[self.nightCol][goodIdx], 1-self.nNightsPerWindow) -
+                       ssoObs[self.nightCol][goodIdx])
+            goodD = np.where((dnights >= 0) & (dnights <= self.tWindow))[0]
+            if len(goodD) > 0:
+                idx = goodD[0]
+                discoveryObs = [ssoObs[self.expMJDCol][idx], 
+                                ssoObs[self.raCol][idx], ssoObs[self.decCol][idx], idx]
+        return discoveryObs
+
 
 
 class ActivityOverTimeMetric(BaseMoMetric):
