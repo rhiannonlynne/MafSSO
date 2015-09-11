@@ -478,14 +478,13 @@ def runMoObs(orbitfile, outfileName, opsimfile,
     # Read opsim database.
     opsdb = OpsimDatabase(opsimfile)
     if dbcols is None:
-        dbcols = ['expMJD', 'night', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter',
-                  'finSeeing', 'fiveSigmaDepth', 'visitExpTime', 'solarElong']
-    else:
-        reqcols = ['expMJD', 'night', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter',
-                   'visitExpTime', 'finSeeing', 'fiveSigmaDepth']
-        for col in reqcols:
-            if col not in dbcols:
-                dbcols.append(col)
+        dbcols = []
+    # Be sure the columns that we need are in place.
+    reqcols = ['expMJD', 'night', 'fieldRA', 'fieldDec', 'rotSkyPos', 'filter',
+               'visitExpTime', 'finSeeing', 'fiveSigmaDepth', 'solarElong']
+    for col in reqcols:
+        if col not in dbcols:
+            dbcols.append(col)
     simdata = opsdb.fetchMetricData(dbcols, sqlconstraint=sqlconstraint)
     print "Queried data from opsim %s, fetched %d visits." %(opsimfile, len(simdata['expMJD']))
 
