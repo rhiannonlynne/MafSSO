@@ -4,7 +4,9 @@ import numpy.ma as ma
 from lsst.sims.maf.metrics import BaseMetric
 
 __all__ = ['BaseMoMetric', 'NObsMetric', 'NObsNoSinglesMetric',
-           'NNightsMetric', 'ObsArcMetric', 'DiscoveryMetric',
+           'NNightsMetric', 'ObsArcMetric',
+           'DiscoveryMetric', 'Discovery_N_ChancesMetric', 'Discovery_N_ObsMetric',
+           'Discovery_TimeMetric', 'Discovery_RADecMetric', 'Discovery_EcLonLatMetric',
            'ActivityOverTimeMetric', 'ActivityOverPeriodMetric']
 
 
@@ -12,18 +14,19 @@ class BaseMoMetric(BaseMetric):
     """Base class for the moving object metrics."""
 
     def __init__(self, cols=None, metricName=None, units='#', badval=0,
+                 comment=None, childMetrics=None,
                  appMagCol='appMag', m5Col='magLimit',
                  nightCol='night', expMJDCol='expMJD',
                  snrCol='SNR',  visCol='vis',
-                 raCol='ra', decCol='dec',
-                 Hindex=0.3):
-        self.metricDtype = 'float'
+                 raCol='ra', decCol='dec'):
+        # Set metric name.
         self.name = metricName
         if self.name is None:
             self.name = self.__class__.__name__.replace('Metric', '', 1)
+        # Set badval and units, leave space for 'comment' (tied to displayDict).
         self.badval = badval
         self.units = units
-        self.comment = None
+        self.comment = comment
         # Set some commonly used column names.
         self.m5Col = m5Col
         self.appMagCol = appMagCol
@@ -39,22 +42,19 @@ class BaseMoMetric(BaseMetric):
         if cols is not None:
             for col in cols:
                 self.colsReq.append(col)
-        # Set parameters used for reduce methods.
-        self.Hindex = Hindex
 
-        # Set up dictionary of reduce functions (may be empty).
-        self.reduceFuncs = {}
-        self.reduceOrder = {}
-        self.reduceUnits = {}
-        for i, r in enumerate(inspect.getmembers(self, predicate=inspect.ismethod)):
-            if r[0].startswith('reduce'):
-                reducename = r[0].replace('reduce', '', 1)
-                self.reduceFuncs[reducename] = r[1]
-                self.reduceOrder[reducename] = i
-                try:
-                    self.reduceUnits[reducename] = r[1].units
-                except AttributeError:
-                    self.reduceUnits[reducename] = '@H'
+        if childMetrics is None:
+            try:
+                if not isinstance(self.childMetrics, dict):
+                    raise ValueError('self.childMetrics must be a dictionary (possibly empty)')
+            except AttributeError:
+                self.childMetrics = {}
+                self.metricDtype = 'float'
+        else:
+            if not isinstance(childMetrics, dict):
+                raise ValueError('childmetrics must be provided as a dictionary.')
+            self.childMetrics = childMetrics
+            self.metricDtype = 'object'
 
     def run(self, ssoObs, orb, Hval):
         raise NotImplementedError
@@ -159,7 +159,12 @@ class DiscoveryMetric(BaseMoMetric):
         @ snrLimit .. if snrLimit is None then uses 'completeness' calculation in 'vis' column.
                    .. if snrLimit is not None, then uses this SNR value as a cutoff.
         """
-        super(DiscoveryMetric, self).__init__(**kwargs)
+        self.childMetrics = {'N_Chances':Discovery_N_ChancesMetric,
+                             'N_Obs':Discovery_N_ObsMetric,
+                             'Time':Discovery_TimeMetric,
+                             'RADec':Discovery_RADecMetric,
+                             'EcLonLat':Discovery_EcLonLatMetric}
+        super(DiscoveryMetric, self).__init__(childMetrics = self.childMetrics, **kwargs)
         self.snrLimit = snrLimit
         self.nObsPerNight = nObsPerNight
         self.tMin = tMin
@@ -228,47 +233,95 @@ class DiscoveryMetric(BaseMoMetric):
         #print 'end', endIdxs, nights[endIdxs]
         return {'start':startIdxs, 'end':endIdxs, 'trackletNights':goodIdx}
 
-    def reduceNchances(self, ssoObs, orb, Hval, metricValues, **kwargs):
+
+class Discovery_N_ChancesMetric(BaseMoMetric):
+    """
+    Child metric to be used with DiscoveryMetric.
+    Calculates total number of discovery opportunities.
+    """
+    def __init__(self, parentDiscoveryMetric, **kwargs):
+        super(Discovery_N_ChancesMetric, self).__init__(**kwargs)
+        self.parentMetric = parentDiscoveryMetric
+
+    def run(self, ssoObs, orb, Hval, metricValues):
         """
         Calculate the number of different discovery chances we had for each object/H combination.
         """
         startIdxs = metricValues['start']
         return len(startIdxs)
 
-    def reduceNobs(self, ssoObs, orb, Hval, metricValues, i=0, **kwargs):
+class Discovery_N_ObsMetric(BaseMoMetric):
+    """
+    Calculates the number of observations in the i-th discovery track.
+    """
+    def __init__(self, parentDiscoveryMetric, i=0, **kwargs):
+        super(Discovery_N_ObsMetric, self).__init__(**kwargs)
+        self.parentMetric = parentDiscoveryMetric
+        # The number of the discovery chance to use.
+        self.i = i
+
+    def run(self, ssoObs, orb, Hval, metricValues):
         """
         Return the number of observations in the i-th discovery opportunity.
-        If i> number of discovery opportunities, returns 0.
         """
-        if i>=len(metricValues['start']):
+        if self.i>=len(metricValues['start']):
             return 0
-        startIdx = metricValues['start'][i]
-        endIdx = metricValues['end'][i]
+        startIdx = metricValues['start'][self.i]
+        endIdx = metricValues['end'][self.i]
         nobs = endIdx - startIdx
         return nobs
 
-    def reduceDiscoveryTime(self, ssoObs, orb, Hval, metricValues, i=0, **kwargs):
+class Discovery_TimeMetric(BaseMoMetric):
+    """
+    Returns the time of the i-th discovery opportunity.
+    """
+    def __init__(self, parentDiscoveryMetric, i=0, **kwargs):
+        super(Discovery_TimeMetric, self).__init__(**kwargs)
+        self.parentMetric = parentDiscoveryMetric
+        self.i = i
+
+    def run(self, ssoObs, orb, Hval, metricValues):
         """
         Return the time of the i-th discovery opportunity.
         """
-        if i>=len(metricValues['start']):
+        if self.i>=len(metricValues['start']):
             return 0
-        startIdx = metricValues['start'][i]
+        startIdx = metricValues['start'][self.i]
         return ssoObs[self.expMJDCol][startIdx]
 
-    def reduceDiscoveryRADec(self, ssoObs, orb, Hval, metricValues, i=0, **kwargs):
+class Discovery_RADecMetric(BaseMoMetric):
+    """
+    Returns the RA/Dec of the i-th discovery opportunity.
+    """
+    def __init__(self, parentDiscoveryMetric, i=0, **kwargs):
+        super(Discovery_RADecMetric, self).__init__(**kwargs)
+        self.parentMetric = parentDiscoveryMetric
+        self.metricDtype = 'object'
+        self.i = i
+
+    def run(self, ssoObs, orb, Hval, metricValues):
         """
         Return the RA/Dec of the i-th discovery opportunity.
         """
-        if i>=len(metricValues['start']):
+        if self.i>=len(metricValues['start']):
             return (-999, -999)
-        startIdx = metricValues['start'][i]
+        startIdx = metricValues['start'][self.i]
         return (ssoObs[self.raCol][startIdx], ssoObs[self.decCol][startIdx])
 
-    def reduceDiscoveryEcLonLat(self, ssoObs, orb, Hval, metricValues, i=0, **kwargs):
-        if i>=len(metricValues['start']):
+class Discovery_EcLonLatMetric(BaseMoMetric):
+    """
+    Returns the ecliptic lon/lat (in degrees) of the i-th discovery opportunity.
+    """
+    def __init__(self, parentDiscoveryMetric, i=0, **kwargs):
+        super(Discovery_EcLonLatMetric, self).__init__(**kwargs)
+        self.parentMetric = parentDiscoveryMetric
+        self.i = i
+        self.metricDtype = 'object'
+
+    def run(self, ssoObs, orb, Hval, metricValues):
+        if self.i>=len(metricValues['start']):
             return (-999, -999)
-        startIdx = metricValues['start'][i]
+        startIdx = metricValues['start'][self.i]
         return (ssoObs['ecLon'][startIdx], ssoObs['ecLat'][startIdx])
 
 
