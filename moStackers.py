@@ -11,6 +11,7 @@ class AppMagStacker(BaseStacker):
         self.magFilterCol = magFilterCol
         self.colsReq = [self.magFilterCol]
         self.colsAdded = ['appMag']
+        self.units = ['mag']
 
     def run(self, ssoObs, Href, Hval):
         self._addStackers(ssoObs)
@@ -30,6 +31,7 @@ class MagLimitStacker(BaseStacker):
         self.lossCol = lossCol
         self.colsReq = [self.m5Col, self.lossCol]
         self.colsAdded = ['magLimit']
+        self.units = ['mag']
 
     def run(self, ssoObs, Href=None, Hval=None):
         self._addStackers(ssoObs)
@@ -49,6 +51,7 @@ class SNRStacker(BaseStacker):
         self.colsReq = [self.appMagCol, self.magLimitCol]
         self.colsAdded = ['SNR']
         self.gamma = gamma
+        self.units = ['SNR']
 
     def run(self, ssoObs, Href=None, Hval=None):
         self._addStackers(ssoObs)
@@ -74,6 +77,7 @@ class VisStacker(BaseStacker):
         self.sigma = sigma
         self.colsReq = [self.magLimitCol, self.appMagCol]
         self.colsAdded = ['vis']
+        self.units = ['']
 
     def run(self, ssoObs, Href=None, Hval=None):
         self._addStackers(ssoObs)
@@ -113,8 +117,8 @@ class EclStacker(BaseStacker):
         y = np.sin(ra) * np.cos(dec)
         z = np.sin(dec)
         xp = x
-        yp = np.cos(ecinc)*y + np.sin(ecinc)*z
-        zp = -np.sin(ecinc)*y + np.cos(ecinc)*z
+        yp = np.cos(self.ecinc)*y + np.sin(self.ecinc)*z
+        zp = -np.sin(self.ecinc)*y + np.cos(self.ecinc)*z
         ssoObs['ecLat'] = np.degrees(np.arcsin(zp))
         ssoObs['ecLon'] = np.degrees(np.arctan2(yp, xp))
         ssoObs['ecLon'] = ssoObs['ecLon'] % 360
@@ -134,9 +138,11 @@ class AllStackers(BaseStacker):
         # Grab all the columns added/required.
         self.colsAdded = []
         self.colsReq = []
-        for s in (self.appMag, self.magLimit, self.snr, self.vis):
+        self.units = []
+        for s in (self.appMag, self.magLimit, self.snr, self.vis, self.ec):
             self.colsAdded += s.colsAdded
             self.colsReq += s.colsReq
+            self.units += s.units
         # Remove duplicates.
         self.colsAdded = list(set(self.colsAdded))
         self.colsReq = list(set(self.colsReq))
@@ -147,7 +153,7 @@ class AllStackers(BaseStacker):
         if len(ssoObs) == 0:
             return ssoObs
         # Add the columns.
-        self._addStackers(ssoObs)
+        ssoObs = self._addStackers(ssoObs)
         # Run the individual stackers, without individually adding columns.
         ssoObs = self.ec._run(ssoObs, Href, Hval)
         ssoObs = self.appMag._run(ssoObs, Href, Hval)
