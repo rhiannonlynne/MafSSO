@@ -17,6 +17,7 @@ class MoMetricBundle(object):
                  runName='opsim', metadata=None,
                  fileRoot=None,
                  plotDict=None, plotFuncs=None,
+                 childMetrics=None,
                  summaryMetrics=None):
         """
         Instantiate moving object metric bundle, save metric/slicer/constraint, etc.
@@ -38,6 +39,7 @@ class MoMetricBundle(object):
         self.setPlotDict(plotDict)
         self.setPlotFuncs(plotFuncs)
         self.setSummaryMetrics(summaryMetrics)
+        self.setChildBundles(childMetrics)
         # Set up metric value storage.
         self.metricValues = None
         self.summaryValues = None
@@ -121,47 +123,25 @@ class MoMetricBundle(object):
             # Moving object slicers keep instantiated plotters in the self.slicer.plotFuncs.
             self.plotFuncs = [pFunc for pFunc in self.slicer.plotFuncs]
 
-    def reduceMetric(self, reduceFunc, reducePlotDict=None, reduceDisplayDict=None):
+    def setChildBundles(self, childMetrics=None):
         """
-        Run reduce methods on the metric bundle, such as completeness or integrate over H distribution.
-        These return a new metric bundle.
+        Identify any child metrics to be run on this (parent) bundle.
+        and create the new metric bundles that will hold the child values, linking to this bundle.
         """
-        rName = reduceFunc.__name__.replace('reduce', '')
-        reduceName = self.metric.name + '_' + rName
-        newmetric = deepcopy(self.metric)
-        newmetric.name = reduceName
-        newBundle = MoMetricBundle(metric=newmetric, slicer=self.slicer,
-                                   constraint=self.constraint,
-                                   runName=self.runName, metadata=self.metadata,
-                                   plotDict=self.plotDict, plotFuncs=self.plotFuncs,
-                                   summaryMetrics=self.summaryMetrics)
-        if rName == 'Completeness':
-            newBundle.metric.name = 'Completeness'
-            newBundle.plotFuncs = [moPlots.MetricVsH()]
-            newBundle.setPlotDict({'ylabel':'Completeness @H'})
-        if rName == 'CumulativeH':
-            newBundle.metric.name = self.metric.name + ' (cumulative H)'
-            newBundle.setPlotDict({'units':'<=H'})
-            if 'ylabel' in newBundle.plotDict:
-                newBundle.plotDict['ylabel'] = newBundle.plotDict['ylabel'].replace('@H', '<=H')
-        newBundle._buildFileRoot()
-        # Calculate new metric values.
-        newBundle.metricValues, Hvals = reduceFunc(self.metricValues, self.slicer.slicePoints['H'])
-        if newBundle.metricValues.shape[1] != self.slicer.slicerShape[1]:
-            # Then something happened with reduceFunction --
-            #  .. usually, this would be with 'completeness'. It can reshape the metric values so that
-            #  (a) if we cloned H, we now go from multiple metricvalues per H value to a single value per H [(nSso, nHrange) -> (1, nHrange)]
-            #  (b) if we did not clone H, we now have a binned metricvalues - one per H bin, instead of one per nsso [(nSso, 1) -> (nHrange, nHrange)]
-            # and we don't really care (in general) because we won't be re-slicing the observations. But we do need to update the slicePoints['H'],
-            #  and for that we need a new slicer. Rereading the orbit file is a bit of a pain, but not too bad.
-            newslicer = MoSlicer(orbitfile=self.slicer.orbitfile, Hrange=Hvals)
-            newBundle.slicer = newslicer
-        return newBundle
+        self.childBundles = {}
+        if childMetrics is None:
+            childMetrics = self.metric.childMetrics
+        for cName, cMetric in childMetrics.iteritems():
+            cBundle = MoMetricBundle(metric=cMetric, slicer=self.slicer,
+                                     constraint=self.constraint,
+                                     runName=self.runName, metadata=self.metadata,
+                                     plotDict=self.plotDict, plotFuncs=self.plotFuncs,
+                                     summaryMetrics=self.summaryMetrics)
+            self.childBundles[cName] = cBundle
 
     def computeSummaryStats(self, resultsDb=None):
         """
-        Compute summary statistics on metricValues, using summaryMetrics (metricbundle list).
-        So far, the only summary metric that is possible to use would be 'ValueAtHMetric'.
+        Compute summary statistics on metricValues, using summaryMetrics.
         """
         if self.summaryValues is None:
             self.summaryValues = {}
@@ -249,22 +229,34 @@ class MoMetricBundleGroup(object):
 
     def runCurrent(self, constraint):
         """
-        Calculate the metric values for set of bundles using the same constraint and slicer.
+        Calculate the metric values for set of (parent and child) bundles using the same constraint and slicer.
         """
-        #allStackers = moStackers.AllStackers()
+        # Identify the observations which are relevant for this constraint.
         self.slicer.subsetObs(constraint)
+        # Set up all the stackers (this assumes we run all of the stackers all of the time).
+        allStackers = moStackers.AllStackers()
         for b in self.currentBundleDict.itervalues():
             b._setupMetricValues()
+            for cb in b.childBundles.itervalues():
+                cb._setupMetricValues()
         for i, slicePoint in enumerate(self.slicer):
             ssoObs = slicePoint['obs']
             for j, Hval in enumerate(slicePoint['Hvals']):
                 # Run stackers to add extra columns (that depend on H)
-                #ssoObs = allStackers.run(ssoObs, slicePoint['orbit']['H'], Hval)
+                ssoObs = allStackers.run(ssoObs, slicePoint['orbit']['H'], Hval)
+                # Run all the parent metrics.
                 for b in self.currentBundleDict.itervalues():
                     if len(ssoObs) == 0:
+                        # Mask the parent metric value.
                         b.metricValues.mask[i][j] = True
+                        # Mask the child metric values.
+                        for cb in b.childBundles.itervalues():
+                            cb.metricValues.mask[i][j] = True
                     else:
-                        b.metricValues.data[i][j] = b.metric.run(ssoObs, slicePoint['orbit'], Hval)
+                        mVal = b.metric.run(ssoObs, slicePoint['orbit'], Hval)
+                        b.metricValues.data[i][j] = mVal
+                        for cb in b.childBundles.iterValues():
+                            cb.metricValues.data[i][j] = cb.metric.run(ssoObs, slicePoint['orbit'], Hval, mVal)
 
     def runAll(self):
         """
@@ -298,40 +290,6 @@ class MoMetricBundleGroup(object):
                              thumbnail=thumbnail, closefigs=closefigs)
         if self.verbose:
             print 'Plotted all metrics.'
-
-    def reduceCurrent(self, updateSummaries=True):
-        """
-        Run all reduce functions for the metricbundle in the currentBundleDict.
-        """
-        # Create a temporary dictionary to hold the reduced metricbundles.
-        reduceBundleDict = {}
-        for b in self.currentBundleDict.itervalues():
-            # If there are no reduce functions associated with the metric, skip this metricBundle.
-            if len(b.metric.reduceFuncs) > 0:
-                # Apply reduce functions, creating a new metricBundle in the process (new metric values).
-                for reduceFunc in b.metric.reduceFuncs.itervalues():
-                    newmetricbundle = b.reduceMetric(reduceFunc)
-                    # Add the new metricBundle to our metricBundleGroup dictionary.
-                    name = newmetricbundle.metric.name
-                    if name in self.bundleDict:
-                        name = newmetricbundle.fileRoot
-                    reduceBundleDict[name] = newmetricbundle
-                # Remove summaryMetrics from top level metricbundle if desired.
-                if updateSummaries:
-                    b.summaryMetrics = []
-        # Add the new metricBundles to the MetricBundleGroup dictionary.
-        self.bundleDict.update(reduceBundleDict)
-        # And add to to the currentBundleDict too, so we run as part of 'summaryCurrent'.
-        self.currentBundleDict.update(reduceBundleDict)
-
-    def reduceAll(self, updateSummaries=True):
-        """
-        Run the reduce methods for all metrics in bundleDict.
-        This assumes that 'clearMemory' was false.
-        """
-        for constraint in self.constraints:
-            self._setCurrent(constraint)
-            self.reduceCurrent(updateSummaries=updateSummaries)
 
     def summaryCurrent(self):
         """
