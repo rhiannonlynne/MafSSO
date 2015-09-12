@@ -159,11 +159,11 @@ class DiscoveryMetric(BaseMoMetric):
         @ snrLimit .. if snrLimit is None then uses 'completeness' calculation in 'vis' column.
                    .. if snrLimit is not None, then uses this SNR value as a cutoff.
         """
-        self.childMetrics = {'N_Chances':Discovery_N_ChancesMetric,
-                             'N_Obs':Discovery_N_ObsMetric,
-                             'Time':Discovery_TimeMetric,
-                             'RADec':Discovery_RADecMetric,
-                             'EcLonLat':Discovery_EcLonLatMetric}
+        self.childMetrics = {'N_Chances':Discovery_N_ChancesMetric(self),
+                             'N_Obs':Discovery_N_ObsMetric(self),
+                             'Time':Discovery_TimeMetric(self),
+                             'RADec':Discovery_RADecMetric(self),
+                             'EcLonLat':Discovery_EcLonLatMetric(self)}
         super(DiscoveryMetric, self).__init__(childMetrics = self.childMetrics, **kwargs)
         self.snrLimit = snrLimit
         self.nObsPerNight = nObsPerNight
