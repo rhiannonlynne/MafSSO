@@ -254,9 +254,14 @@ class MoMetricBundleGroup(object):
                             cb.metricValues.mask[i][j] = True
                     else:
                         mVal = b.metric.run(ssoObs, slicePoint['orbit'], Hval)
-                        b.metricValues.data[i][j] = mVal
-                        for cb in b.childBundles.iterValues():
-                            cb.metricValues.data[i][j] = cb.metric.run(ssoObs, slicePoint['orbit'], Hval, mVal)
+                        if mVal == b.metric.badval:
+                            b.metricValues.mask[i][j] = True
+                            for cb in b.childBundles.itervalues():
+                                cb.metricValues.mask[i][j] = True
+                        else:
+                            b.metricValues.data[i][j] = mVal
+                            for cb in b.childBundles.itervalues():
+                                cb.metricValues.data[i][j] = cb.metric.run(ssoObs, slicePoint['orbit'], Hval, mVal)
 
     def runAll(self):
         """
