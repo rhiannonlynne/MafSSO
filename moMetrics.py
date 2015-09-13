@@ -171,7 +171,7 @@ class DiscoveryMetric(BaseMoMetric):
         self.tMax = tMax
         self.nNightsPerWindow = nNightsPerWindow
         self.tWindow = tWindow
-        self.badval = []
+        self.badval = None
 
     def run(self, ssoObs, orb, Hval):
         if self.snrLimit is not None:
@@ -264,7 +264,7 @@ class Discovery_N_ObsMetric(BaseMoMetric):
         """
         Return the number of observations in the i-th discovery opportunity.
         """
-        if self.i>=len(metricValues['start']):
+        if self.i >= len(metricValues['start']):
             return 0
         startIdx = metricValues['start'][self.i]
         endIdx = metricValues['end'][self.i]
