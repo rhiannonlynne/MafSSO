@@ -1,5 +1,6 @@
 import numpy as np
 from lsst.sims.maf.stackers import BaseStacker
+import warnings
 
 # ssoObs is a numpy rec array.
 
@@ -153,7 +154,9 @@ class AllStackers(BaseStacker):
         if len(ssoObs) == 0:
             return ssoObs
         # Add the columns.
-        ssoObs = self._addStackers(ssoObs)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            ssoObs = self._addStackers(ssoObs)
         # Run the individual stackers, without individually adding columns.
         ssoObs = self.ec._run(ssoObs, Href, Hval)
         ssoObs = self.appMag._run(ssoObs, Href, Hval)
