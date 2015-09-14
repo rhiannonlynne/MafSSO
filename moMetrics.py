@@ -147,7 +147,7 @@ class ObsArcMetric(BaseMoMetric):
 class DiscoveryMetric(BaseMoMetric):
     """Identify the discovery opportunities for an object."""
     def __init__(self, nObsPerNight=2,
-                 tMin=15./60.0/24.0, tMax=90./60./24.0,
+                 tMin=5./60.0/24.0, tMax=90./60./24.0,
                  nNightsPerWindow=3, tWindow=15,
                  snrLimit=None, **kwargs):
         """
