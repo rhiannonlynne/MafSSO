@@ -13,7 +13,7 @@ def integrateOverH(Mvalues, Hvalues, Hindex = 0.3):
     # dndh = differential size distribution (number in this bin)
     dndh = np.power(10., Hindex*(Hvalues-Hvalues.min()))
     # dn = cumulative size distribution (number in this bin and brighter)
-    intVals = np.cumsum(Mvalues*dndh, axis=1)/np.cumsum(dndh)
+    intVals = np.cumsum(Mvalues*dndh)/np.cumsum(dndh)
     return intVals
 
 class ValueAtHMetric(BaseMoMetric):
@@ -67,11 +67,9 @@ class CompletenessMetric(BaseMoMetric):
         discoveriesH = discoveryChances.swapaxes(0, 1)
         if nHval == discoveryChances.shape[1]:
             # Hvals array is probably the same as the cloned H array.
-            completeness = ma.MaskedArray(data = np.zeros([1, nHval], float),
-                                          mask = np.zeros([1, nHval], 'bool'),
-                                          fill_value = 0.0)
+            completeness = np.zeros(len(Hvals), float)
             for i, H in enumerate(Hvals):
-                completeness.data[0][i] = np.where(discoveriesH[i].filled(0) >= self.requiredChances)[0].size
+                completeness[i] = np.where(discoveriesH[i].filled(0) >= self.requiredChances)[0].size
             completeness = completeness / float(nSsos)
         else:
             # The Hvals are spread more randomly among the objects (we probably used one per object).
@@ -86,11 +84,8 @@ class CompletenessMetric(BaseMoMetric):
             n_all, b = np.histogram(discoveriesH[0], bins)
             condition = np.where(discoveriesH[0] >= self.requiredChances)[0]
             n_found, b = np.histogram(discoveriesH[0][condition], bins)
-            completeness = ma.MaskedArray(data = np.zeros([1, len(Hvals)], float),
-                                          mask = np.zeros([1, len(Hvals)], bool),
-                                          fill_value = 0.0)
-            completeness.data[0] = n_found.astype(float) / n_all.astype(float)
-            completeness.mask[0] = np.where(n_all==0, True, False)
+            completeness = n_found.astype(float) / n_all.astype(float)
+            completeness = np.where(n_all==0, 0, completeness)
         return completeness, Hvals
 
 
@@ -102,6 +97,7 @@ class CumulativeCompletenessMetric(BaseMoMetric):
     """
     def __init__(self, requiredChances=1, nbins=20, minHrange=1.0, Hindex=0.3, **kwargs):
         super(CumulativeCompletenessMetric, self).__init__(**kwargs)
+        self.units = '<= H'
         self.requiredChances = requiredChances
         # If H is not a cloned distribution, then we need to specify how to bin these values.
         self.nbins = nbins
@@ -114,11 +110,9 @@ class CumulativeCompletenessMetric(BaseMoMetric):
         discoveriesH = discoveryChances.swapaxes(0, 1)
         if nHval == discoveryChances.shape[1]:
             # Hvals array is probably the same as the cloned H array.
-            completeness = ma.MaskedArray(data = np.zeros([1, nHval], float),
-                                          mask = np.zeros([1, nHval], 'bool'),
-                                          fill_value = 0.0)
+            completeness = np.zeros(len(Hvals), float)
             for i, H in enumerate(Hvals):
-                completeness.data[0][i] = np.where(discoveriesH[i].filled(0) >= self.requiredChances)[0].size
+                completeness[i] = np.where(discoveriesH[i].filled(0) >= self.requiredChances)[0].size
             completeness = completeness / float(nSsos)
         else:
             # The Hvals are spread more randomly among the objects (we probably used one per object).
@@ -133,10 +127,7 @@ class CumulativeCompletenessMetric(BaseMoMetric):
             n_all, b = np.histogram(discoveriesH[0], bins)
             condition = np.where(discoveriesH[0] >= self.requiredChances)[0]
             n_found, b = np.histogram(discoveriesH[0][condition], bins)
-            completeness = ma.MaskedArray(data = np.zeros([1, len(Hvals)], float),
-                                          mask = np.zeros([1, len(Hvals)], bool),
-                                          fill_value = 0.0)
-            completeness.data[0] = n_found.astype(float) / n_all.astype(float)
-            completeness.mask[0] = np.where(n_all==0, True, False)
+            completeness = n_found.astype(float) / n_all.astype(float)
+            completeness = np.where(n_all==0, 0, completeness)
         completenessInt = integrateOverH(completeness, Hvals, self.Hindex)
         return completenessInt, Hvals
