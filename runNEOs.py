@@ -7,7 +7,7 @@ import moObs as moObs
 import lsst.sims.maf.plots as plots
 from moSlicer import MoSlicer
 import moMetrics as moMetrics
-from moSummaryMetrics import ValueAtHMetric
+import moSummaryMetrics as moSummaryMetrics
 import moPlots as moPlots
 import moMetricBundle as mmb
 
@@ -36,7 +36,7 @@ def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
     metric = moMetrics.NObsMetric()
     slicer = mos
     pandasConstraint = None
-    plotDict = {'nxbins':100, 'nybins':100}
+    plotDict = {'nxbins':200, 'nybins':200}
     nobs = mmb.MoMetricBundle(metric, slicer, pandasConstraint,
                           runName=runName, metadata=metadata, plotDict=plotDict)
 
@@ -50,11 +50,13 @@ def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
         slicer = mos
         pandasConstraint = None
         discovery[nObs] = mmb.MoMetricBundle(metric, slicer, pandasConstraint,
-                                             runName=runName, metadata=md, plotDict=plotDict)
+                                             runName=runName, metadata=md,
+                                             plotDict=plotDict, plotFuncs=[moPlots.MetricVsH()])
 
     discovery['4nights'] = mmb.MoMetricBundle(metric=moMetrics.DiscoveryMetric(nObsPerNight=2, nNightsPerWindow=4),
-                                              slicer=mos, pandasConstraint=None, runName=runName, 
-                                              metadata = metadata+'4 nights/track', plotDict=plotDict)
+                                              slicer=mos, constraint=None, runName=runName,
+                                              metadata = metadata+'4 nights/track',
+                                              plotDict=plotDict, plotFuncs=[moPlots.MetricVsH()])
 
     bdict = {'discovery_%s' %(nObs):discovery[nObs] for nObs in nObsList }
     bdict['4nights'] = discovery['4nights']
@@ -64,31 +66,56 @@ def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
     bg.runAll()
     bg.plotAll()
 
+    Hmark = 22
+
     completeness = {}
     completenessInt = {}
     hVals = {}
-    plt.figure()
+    fig1 = plt.figure()
+    plt.title('Completeness %s' %(runName))
+    fig2 = plt.figure()
+    plt.title('Cumulative completeness %s' %(runName))
     for nObs in nObsList:
-        discChances = discovery[nObs].childBundles['Discovery_N_Chances']
-        discChances.setSummaryMetrics([moMetrics.CompletenessMetric()])
+        discChances = discovery[nObs].childBundles['N_Chances']
+        discChances.setSummaryMetrics([moSummaryMetrics.CompletenessMetric(), moSummaryMetrics.CumulativeCompletenessMetric()])
         discChances.computeSummaryStats()
         completeness[nObs] = discChances.summaryValues['Completeness'][0]
         hVals[nObs] = discChances.summaryValues['Completeness'][1]
+        completenessInt[nObs] = discChances.summaryValues['CumulativeCompleteness'][0]
+        print discChances.summaryValues['Completeness']
+        print nObs
+        print hVals[nObs]
+        print completeness[nObs]
+        print completenessInt[nObs]
         Hidx = np.where(hVals[nObs] == Hmark)[0]
+        plt.figure(fig1.number)
         cval = completeness[nObs][Hidx]
-        plt.plot(hVals[nObs], completeness[nObs], label='%d per tracklet, %.2f @H=%.1f' %(nObs, cval, Hmark))
+        plt.plot(hVals[nObs], completeness[nObs], label='%s per tracklet, %.2f @H=%.1f' %(nObs, cval, Hmark))
+        plt.figure(fig2.number)
+        cval = completenessInt[nObs][Hidx]
+        plt.plot(hVals[nObs], completenessInt[nObs], label='%s per tracklet, %.2f @H=%.1f' %(nObs, cval, Hmark))
     for nObs in ['4nights']:
-        discChances = discovery[nObs].childBundles['Discovery_N_Chances']
-        discChances.setSummaryMetrics([moMetrics.CompletenessMetric()])
+        discChances = discovery[nObs].childBundles['N_Chances']
+        discChances.setSummaryMetrics([moSummaryMetrics.CompletenessMetric(), moSummaryMetrics.CumulativeCompletenessMetric()])
         discChances.computeSummaryStats()
         completeness[nObs] = discChances.summaryValues['Completeness'][0]
         hVals[nObs] = discChances.summaryValues['Completeness'][1]
+        completenessInt[nObs] = discChances.summaryValues['CumulativeCompleteness'][0]
         Hidx = np.where(hVals[nObs] == Hmark)[0]
+        plt.figure(fig1.number)
         cval = completeness[nObs][Hidx]
-        plt.plot(hVals[nObs], completeness[nObs], label='%d pairs per track, %.2f @H=%.1f' %(nObs, cval, Hmark))
+        plt.plot(hVals[nObs], completeness[nObs], label='%s pairs per track, %.2f @H=%.1f' %(nObs, cval, Hmark))
+        plt.figure(fig2.number)
+        cval = completenessInt[nObs][Hidx]
+        plt.plot(hVals[nObs], completenessInt[nObs], label='%s pairs per track, %.2f @H=%.1f' %(nObs, cval, Hmark))
+    plt.figure(fig1.number)
     plt.axvline(Hmark, color='r', linestyle=':')
-    plt.legend(loc=(0.1, 0.2))
-    plt.savefig(os.path.join(outDir, 'completeness.png'), format='png')
+    plt.legend(loc='upper right', fancybox=True, numpoints=1, fontsize='smallest')
+    plt.savefig(os.path.join(outDir, 'completeness.pdf'), format='pdf')
+    plt.figure(fig2.number)
+    plt.axvline(Hmark, color='r', linestyle=':')
+    plt.legend(loc='upper right', fancybox=True, numpoints=1, fontsize='smallest')
+    plt.savefig(os.path.join(outDir, 'completenessInt.pdf'), format='pdf')
 
 
 if __name__ == '__main__':
