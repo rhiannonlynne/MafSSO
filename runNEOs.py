@@ -46,14 +46,15 @@ def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
     nObsList = [2, 3, 4]
     for nObs in nObsList:
         md = metadata + ' %d visits/night' %(nObs)
-        metric = moMetrics.DiscoveryMetric(nObsPerNight=nObs)
+        metric = moMetrics.DiscoveryMetric(tMin=0, tMax=90./60/24., nObsPerNight=nObs, nNightsPerWindow=3, tWindow=30)
         slicer = mos
         pandasConstraint = None
         discovery[nObs] = mmb.MoMetricBundle(metric, slicer, pandasConstraint,
                                              runName=runName, metadata=md,
                                              plotDict=plotDict, plotFuncs=[moPlots.MetricVsH()])
 
-    discovery['4nights'] = mmb.MoMetricBundle(metric=moMetrics.DiscoveryMetric(nObsPerNight=2, nNightsPerWindow=4),
+    metric = moMetrics.DiscoveryMetric(tMin=0, tMax=90./60/24., nObsPerNight=nObs, nNightsPerWindow=4, tWindow=30)
+    discovery['4nights'] = mmb.MoMetricBundle(metric=metric,
                                               slicer=mos, constraint=None, runName=runName,
                                               metadata = metadata+'4 nights/track',
                                               plotDict=plotDict, plotFuncs=[moPlots.MetricVsH()])
@@ -110,11 +111,11 @@ def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
         plt.plot(hVals[nObs], completenessInt[nObs], label='%s pairs per track, %.2f @H=%.1f' %(nObs, cval, Hmark))
     plt.figure(fig1.number)
     plt.axvline(Hmark, color='r', linestyle=':')
-    plt.legend(loc='upper right', fancybox=True, numpoints=1, fontsize='smallest')
+    plt.legend(loc='upper right', fancybox=True, numpoints=1, fontsize='smaller')
     plt.savefig(os.path.join(outDir, 'completeness.pdf'), format='pdf')
     plt.figure(fig2.number)
     plt.axvline(Hmark, color='r', linestyle=':')
-    plt.legend(loc='upper right', fancybox=True, numpoints=1, fontsize='smallest')
+    plt.legend(loc='upper right', fancybox=True, numpoints=1, fontsize='smaller')
     plt.savefig(os.path.join(outDir, 'completenessInt.pdf'), format='pdf')
 
 
@@ -122,6 +123,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Python script to run MAF NEO completeness analysis')
     parser.add_argument('--orbitFile', type=str, default='pha20141031.des', help="full file path to the orbit file")
+    parser.add_argument('--obsFile', type=str, default=None, help='full file path to the observation file')
     parser.add_argument("--outDir",type=str, default=None, help='Output directory for MAF outputs. Default opsimdb_orbitroot')
     parser.add_argument('--plotOnly', dest='plotOnly', action='store_true',
                         default=False, help="Reload the metric values from disk and re-plot them.")
@@ -131,7 +133,10 @@ if __name__ == '__main__':
 
     orbitfile = args.orbitFile
     orbitroot = os.path.split(orbitfile)[-1].replace('.txt', '').replace('.des', '').replace('.dat', '')
-    obsfile = orbitroot + '_allObs.txt'
+    if args.obsFile is None:
+        obsfile = orbitroot + '_allObs.txt'
+    else:
+        obsfile = args.obsFile
     opsimdb = args.dbFile
     runName = os.path.split(opsimdb)[-1].replace('_sqlite.db', '')
     metadata = '%s' %(orbitroot)

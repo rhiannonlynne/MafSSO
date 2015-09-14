@@ -218,20 +218,20 @@ class DiscoveryMetric(BaseMoMetric):
         #print 'good tracklets', nights[goodIdx]
         if len(goodIdx) < self.nNightsPerWindow:
             return self.badval
-        deltaNights = (np.roll(nights[goodIdx], 1 - self.nNightsPerWindow) - nights[goodIdx])[:(self.nNightsPerWindow-1)]
+        deltaNights = (np.roll(ssoObs[self.nightCol][vis][goodIdx], 1 - self.nNightsPerWindow) - ssoObs[self.nightCol][vis][goodIdx])[:-(int(self.nNightsPerWindow)-1)]
         # Identify the index in ssoObs[vis][goodIdx] (sorted by expMJD) where the discovery opportunity starts.
         startIdxs = np.where((deltaNights > 0) & (deltaNights <= self.tWindow))[0]
         # Identify the index where the discovery opportunity ends.
         endIdxs = np.zeros(len(startIdxs), dtype='int')
         for i, sIdx in enumerate(startIdxs):
-            inWindow = np.where(nights[goodIdx] - nights[goodIdx][sIdx] <= self.tWindow)[0]
+            inWindow = np.where(ssoObs[self.nightCol][vis][goodIdx] - ssoObs[self.nightCol][vis][goodIdx][sIdx] <= self.tWindow)[0]
             endIdxs[i] = np.array([inWindow.max()])
         # Convert back to index based on ssoObs[vis] (sorted by expMJD).
         startIdxs = goodIdx[startIdxs]
         endIdxs = goodIdxEnds[endIdxs]
-        #print 'start', startIdxs,  nights[startIdxs]
-        #print 'end', endIdxs, nights[endIdxs]
-        return {'start':startIdxs, 'end':endIdxs, 'trackletNights':goodIdx}
+        #print 'start', startIdxs,  nights[startIdxs], orb['objId'], Hval
+        #print 'end', endIdxs, nights[endIdxs], orb['objId'], Hval
+        return {'start':startIdxs, 'end':endIdxs, 'trackletNights':ssoObs[self.nightCol][goodIdx]}
 
 
 class Discovery_N_ChancesMetric(BaseMoMetric):
