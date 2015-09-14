@@ -279,6 +279,8 @@ class MoMetricBundleGroup(object):
                                   savefig=savefig, figformat=figformat, dpi=dpi, thumbnail=thumbnail)
         for b in self.currentBundleDict.itervalues():
             b.plot(plotHandler=plotHandler, outfileSuffix=outfileSuffix, savefig=savefig)
+            for cb in b.childBundles.itervalues():
+                cb.plot(plotHandler=plotHandler, outfileSuffix=outfileSuffix, savefig=savefig)
             if closefigs:
                 plt.close('all')
         if self.verbose:
