@@ -147,13 +147,13 @@ class ObsArcMetric(BaseMoMetric):
 class DiscoveryMetric(BaseMoMetric):
     """Identify the discovery opportunities for an object."""
     def __init__(self, nObsPerNight=2,
-                 tMin=5.*60.0, tMax=90.*60.,
+                 tMin=15./60.0/24.0, tMax=90./60./24.0,
                  nNightsPerWindow=3, tWindow=15,
                  snrLimit=None, **kwargs):
         """
         @ nObsPerNight = number of observations per night required for tracklet
-        @ tMin = min time start/finish for the tracklet (seconds)
-        @ tMax = max time start/finish for the tracklet (seconds)
+        @ tMin = min time start/finish for the tracklet (days)
+        @ tMax = max time start/finish for the tracklet (days)
         @ nNightsPerWindow = number of nights with observations required for track
         @ tWindow = max number of nights in track (days)
         @ snrLimit .. if snrLimit is None then uses 'completeness' calculation in 'vis' column.
@@ -245,10 +245,10 @@ class Discovery_N_ChancesMetric(BaseMoMetric):
 
     def run(self, ssoObs, orb, Hval, metricValues):
         """
-        Calculate the number of different discovery chances we had for each object/H combination.
+        Return the number of different discovery chances we had for each object/H combination.
         """
-        startIdxs = metricValues['start']
-        return len(startIdxs)
+        nchances = metricValues['start'].size
+        return nchances
 
 class Discovery_N_ObsMetric(BaseMoMetric):
     """
