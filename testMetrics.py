@@ -101,8 +101,8 @@ class TestDiscoveryMetrics(unittest.TestCase):
                           13.1, 13.5],
                           dtype='float')
         ssoObs = np.recarray([len(times)], dtype=([('time', '<f8'), ('ra', '<f8'), ('dec', '<f8'), ('ecLon', '<f8'), ('ecLat', '<f8'),
-                                                ('appMag', '<f8'), ('expMJD', '<f8'), ('night', '<f8'), ('magLimit', '<f8'),
-                                                ('SNR', '<f8'), ('vis', '<f8')]))
+                                                   ('appMag', '<f8'), ('expMJD', '<f8'), ('night', '<f8'), ('magLimit', '<f8'),
+                                                   ('SNR', '<f8'), ('vis', '<f8'), ('magFilter', '<f8'), ('fiveSigmaDepth', '<f8'), ('dmagDetect', '<f8')]))
 
         ssoObs['time'] = times
         ssoObs['expMJD'] = times
@@ -112,12 +112,16 @@ class TestDiscoveryMetrics(unittest.TestCase):
         ssoObs['ecLon'] = ssoObs['ra'] + 10
         ssoObs['ecLat'] = ssoObs['dec'] + 20
         ssoObs['appMag'] = np.zeros(len(times), dtype='float') + 24.0
+        ssoObs['magFilter'] = np.zeros(len(times), dtype='float') + 24.0
+        ssoObs['fiveSigmaDepth'] = np.zeros(len(times), dtype='float') + 25.0
+        ssoObs['dmagDetect'] = np.zeros(len(times), dtype='float')
         ssoObs['magLimit'] = np.zeros(len(times), dtype='float') + 25.0
         ssoObs['SNR'] = np.zeros(len(times), dtype='float') + 5.0
         ssoObs['vis'] = np.zeros(len(times), dtype='float') + 1
         ssoObs['vis'][0:5] = 0
         self.ssoObs = ssoObs
-        self.orb = None
+        self.orb = np.recarray([len(times)], dtype=([('H', '<f8')]))
+        self.orb['H'] = np.zeros(len(times), dtype='float') + 8
         self.Hval = 8
 
     def testDiscoveryMetric(self):
@@ -147,6 +151,11 @@ class TestDiscoveryMetrics(unittest.TestCase):
         lon, lat = child.run(self.ssoObs, self.orb, self.Hval, metricValue)
         self.assertEqual(lon, 10)
         self.assertEqual(lat, 25)
+
+        discMetric2 = DiscoveryChancesMetric(nObsPerNight=2, tNight=0.3,
+                                             nNightsPerWindow=3, tWindow=9, snrLimit=5)
+        metricValue2 = discMetric2.run(self.ssoObs, self.orb, self.Hval)
+        print metricValue2, nchances
 
 if __name__ == "__main__":
     unittest.main()
