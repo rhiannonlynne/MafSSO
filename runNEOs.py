@@ -44,23 +44,31 @@ def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
     # Set up an example metric bundle.
     discovery = {}
     nObsList = [2, 3, 4]
-    for nObs in nObsList:
-        md = metadata + ' %d visits/night' %(nObs)
-        metric = moMetrics.DiscoveryMetric(tMin=0, tMax=90./60/24., nObsPerNight=nObs, nNightsPerWindow=3, tWindow=30)
-        slicer = mos
-        pandasConstraint = None
-        discovery[nObs] = mmb.MoMetricBundle(metric, slicer, pandasConstraint,
-                                             runName=runName, metadata=md,
-                                             plotDict=plotDict, plotFuncs=[moPlots.MetricVsH()])
+    nyears = [3, 5, 10, 12, 15]
+    for yr in nyears:
+        discovery[yr] = {}
+        for nObs in nObsList:
+            md = metadata + ' %d visits/night after %d years' %(nObs, yr)
+            #metric = moMetrics.DiscoveryMetric(tMin=0, tMax=90./60/24., nObsPerNight=nObs, nNightsPerWindow=3, tWindow=30)
+            metric = moMetrics.DiscoveryChancesMetric(tNight=90./60./24., nObsPerNight=nObs, nNightsPerWindow=3, tWindow=15)
+            slicer = mos
+            pandasConstraint = 'night <= %d' %(yr*365)
+            discovery[yr][nObs] = mmb.MoMetricBundle(metric, slicer, pandasConstraint,
+                                                    runName=runName, metadata=md,
+                                                    plotDict=plotDict, plotFuncs=[moPlots.MetricVsH()])
 
-    metric = moMetrics.DiscoveryMetric(tMin=0, tMax=90./60/24., nObsPerNight=nObs, nNightsPerWindow=4, tWindow=30)
-    discovery['4nights'] = mmb.MoMetricBundle(metric=metric,
-                                              slicer=mos, constraint=None, runName=runName,
-                                              metadata = metadata+'4 nights/track',
-                                              plotDict=plotDict, plotFuncs=[moPlots.MetricVsH()])
+        #metric = moMetrics.DiscoveryMetric(tMin=0, tMax=90./60/24., nObsPerNight=2, nNightsPerWindow=4, tWindow=30)
+        metric = moMetrics.DiscoveryChancesMetric(tNight=90./60./24., nObsPerNight=2, nNightsPerWindow=4, tWindow=30)
+        discovery[yr]['4nights'] = mmb.MoMetricBundle(metric=metric,
+                                                slicer=mos, constraint=pandasConstraint, runName=runName,
+                                                metadata = metadata+'4 nights/track after %d years' %(yr),
+                                                plotDict=plotDict, plotFuncs=[moPlots.MetricVsH()])
 
-    bdict = {'discovery_%s' %(nObs):discovery[nObs] for nObs in nObsList }
-    bdict['4nights'] = discovery['4nights']
+    bdict = {}
+    for yr in nyears:
+        for nObs in nObsList:
+            bdict['discovery_%s_%d' %(nObs, yr)] = discovery[yr][nObs]
+        bdict['4nights_%d' %(yr)] = discovery[yr]['4nights']
     bdict['nobs'] = nobs
 
     bg = mmb.MoMetricBundleGroup(bdict, outDir=outDir)
@@ -77,7 +85,8 @@ def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
     fig2 = plt.figure()
     plt.title('Cumulative completeness %s' %(runName))
     for nObs in nObsList:
-        discChances = discovery[nObs].childBundles['N_Chances']
+        #discChances = discovery[nObs].childBundles['N_Chances']
+        discChances = discovery[12][nObs]
         discChances.setSummaryMetrics([moSummaryMetrics.CompletenessMetric(), moSummaryMetrics.CumulativeCompletenessMetric()])
         discChances.computeSummaryStats()
         completeness[nObs] = discChances.summaryValues['Completeness'][0]
@@ -91,12 +100,13 @@ def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
         Hidx = np.where(hVals[nObs] == Hmark)[0]
         plt.figure(fig1.number)
         cval = completeness[nObs][Hidx]
-        plt.plot(hVals[nObs], completeness[nObs], label='%s per tracklet, %.2f @H=%.1f' %(nObs, cval, Hmark))
+        plt.plot(hVals[nObs], completeness[nObs], label='%s obs/tracklet, %.0f%s H @ %.1f' %(nObs, cval*100, '%', Hmark))
         plt.figure(fig2.number)
         cval = completenessInt[nObs][Hidx]
-        plt.plot(hVals[nObs], completenessInt[nObs], label='%s per tracklet, %.2f @H=%.1f' %(nObs, cval, Hmark))
+        plt.plot(hVals[nObs], completenessInt[nObs], label='%s obs/tracklet, %.0f%s H <= %.1f' %(nObs, cval*100, '%', Hmark))
     for nObs in ['4nights']:
-        discChances = discovery[nObs].childBundles['N_Chances']
+        #discChances = discovery[nObs].childBundles['N_Chances']
+        discChances = discovery[12][nObs]
         discChances.setSummaryMetrics([moSummaryMetrics.CompletenessMetric(), moSummaryMetrics.CumulativeCompletenessMetric()])
         discChances.computeSummaryStats()
         completeness[nObs] = discChances.summaryValues['Completeness'][0]
@@ -105,16 +115,20 @@ def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
         Hidx = np.where(hVals[nObs] == Hmark)[0]
         plt.figure(fig1.number)
         cval = completeness[nObs][Hidx]
-        plt.plot(hVals[nObs], completeness[nObs], label='%s pairs per track, %.2f @H=%.1f' %(nObs, cval, Hmark))
+        plt.plot(hVals[nObs], completeness[nObs], label='4 pairs/track, %.0f%s H @ %.1f' %(cval*100, '%', Hmark))
         plt.figure(fig2.number)
         cval = completenessInt[nObs][Hidx]
-        plt.plot(hVals[nObs], completenessInt[nObs], label='%s pairs per track, %.2f @H=%.1f' %(nObs, cval, Hmark))
+        plt.plot(hVals[nObs], completenessInt[nObs], label='4 pairs/track, %.0f%s H <= %.1f' %(cval*100, '%', Hmark))
     plt.figure(fig1.number)
     plt.axvline(Hmark, color='r', linestyle=':')
+    plt.xlabel('H')
+    plt.ylabel('Completeness @ H')
     plt.legend(loc='upper right', fancybox=True, numpoints=1, fontsize='smaller')
     plt.savefig(os.path.join(outDir, 'completeness.pdf'), format='pdf')
     plt.figure(fig2.number)
     plt.axvline(Hmark, color='r', linestyle=':')
+    plt.xlabel('H')
+    plt.ylabel('Completeness <= H')
     plt.legend(loc='upper right', fancybox=True, numpoints=1, fontsize='smaller')
     plt.savefig(os.path.join(outDir, 'completenessInt.pdf'), format='pdf')
 
