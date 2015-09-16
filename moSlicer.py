@@ -59,7 +59,8 @@ class MoSlicer(MoOrbits):
             self.allObs['velocity'] = np.sqrt(self.allObs['dradt']**2 + self.allObs['ddecdt']**2)
         # If we created intermediate data products by pandas, we may have an inadvertent 'index'
         #  column. Since this creates problems later, drop it here.
-        self.allObs.drop('index', axis=1, inplace=True)
+        if 'index' in self.allObs.columns.values:
+            self.allObs.drop('index', axis=1, inplace=True)
         self.subsetObs()
 
     def subsetObs(self, pandasConstraint=None):
