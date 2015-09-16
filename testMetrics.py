@@ -101,7 +101,7 @@ class TestDiscoveryMetrics(unittest.TestCase):
                           13.1, 13.5],
                           dtype='float')
         ssoObs = np.recarray([len(times)], dtype=([('time', '<f8'), ('ra', '<f8'), ('dec', '<f8'), ('ecLon', '<f8'), ('ecLat', '<f8'),
-                                                   ('appMag', '<f8'), ('expMJD', '<f8'), ('night', '<f8'), ('magLimit', '<f8'),
+                                                   ('appMag', '<f8'), ('expMJD', '<f8'), ('night', '<f8'), ('magLimit', '<f8'), ('velocity', '<f8'),
                                                    ('SNR', '<f8'), ('vis', '<f8'), ('magFilter', '<f8'), ('fiveSigmaDepth', '<f8'), ('dmagDetect', '<f8')]))
 
         ssoObs['time'] = times
@@ -119,6 +119,7 @@ class TestDiscoveryMetrics(unittest.TestCase):
         ssoObs['SNR'] = np.zeros(len(times), dtype='float') + 5.0
         ssoObs['vis'] = np.zeros(len(times), dtype='float') + 1
         ssoObs['vis'][0:5] = 0
+        ssoObs['velocity'] = np.random.rand(len(times))
         self.ssoObs = ssoObs
         self.orb = np.recarray([len(times)], dtype=([('H', '<f8')]))
         self.orb['H'] = np.zeros(len(times), dtype='float') + 8
@@ -155,7 +156,22 @@ class TestDiscoveryMetrics(unittest.TestCase):
         discMetric2 = DiscoveryChancesMetric(nObsPerNight=2, tNight=0.3,
                                              nNightsPerWindow=3, tWindow=9, snrLimit=5)
         metricValue2 = discMetric2.run(self.ssoObs, self.orb, self.Hval)
-        print metricValue2, nchances
+        self.assertEqual(metricValue2, nchances)
+
+        discMetric3 = MagicDiscoveryMetric(nObs=4, tWindow=3, snrLimit=5)
+        metricValue3 = discMetric3.run(self.ssoObs, self.orb, self.Hval)
+        print 'magic', metricValue3, nchances
+
+    def testHighVelocityMetric(self):
+        velMetric = HighVelocityMetric(velocity=1.0, snrLimit=5)
+        metricValue = velMetric.run(self.ssoObs, self.orb, self.Hval)
+        self.assertEqual(metricValue, 0)
+        self.ssoObs['velocity'][0:2] = 1.5
+        metricValue = velMetric.run(self.ssoObs, self.orb, self.Hval)
+        self.assertEqual(metricValue, 2)
+        velMetric = HighVelocityMetric(velocity=1.0, snrLimit=None)
+        metricValue = velMetric.run(self.ssoObs, self.orb, self.Hval)
+        self.assertEqual(metricValue, 0)
 
 if __name__ == "__main__":
     unittest.main()

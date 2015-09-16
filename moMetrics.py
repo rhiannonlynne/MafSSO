@@ -8,7 +8,7 @@ __all__ = ['BaseMoMetric', 'NObsMetric', 'NObsNoSinglesMetric',
            'DiscoveryMetric', 'Discovery_N_ChancesMetric', 'Discovery_N_ObsMetric',
            'Discovery_TimeMetric', 'Discovery_RADecMetric', 'Discovery_EcLonLatMetric',
            'ActivityOverTimeMetric', 'ActivityOverPeriodMetric',
-           'DiscoveryChancesMetric']
+           'DiscoveryChancesMetric', 'MagicDiscoveryMetric', 'HighVelocityMetric']
 
 
 class BaseMoMetric(BaseMetric):
@@ -409,9 +409,6 @@ class DiscoveryChancesMetric(BaseMoMetric):
         @ tWindow = max number of nights in track (days)
         @ snrLimit .. if snrLimit is None then uses 'completeness' calculation,
                    .. if snrLimit is not None, then uses this value as a cutoff.
-        Parameters for reduce method (Completeness)
-        @ requiredChances = number of possible discovery chances required to count an object as 'found'
-        @ nBins = number of bins to split "H" into, if not using cloned H distribution.
         """
         super(DiscoveryChancesMetric, self).__init__(**kwargs)
         self.snrLimit = snrLimit
@@ -426,18 +423,12 @@ class DiscoveryChancesMetric(BaseMoMetric):
     def run(self, ssoObs, orb, Hval):
         """SsoObs = Dataframe, orb=Dataframe, Hval=single number."""
         # Calculate visibility for this orbit at this H.
-        appMag = ssoObs['magFilter'] + Hval - orb['H']
-        magLimit = ssoObs['fiveSigmaDepth'] - ssoObs['dmagDetect']
-        if self.snrLimit is None:
-            probcompleteness = 1.0 / (1 + np.exp((appMag - magLimit)/self.sigma))
-            probability = np.random.random_sample(len(appMag))
-            vis = np.where(probability <= probcompleteness)[0]
+        if self.snrLimit is not None:
+            vis = np.where(ssoObs[self.snrCol] >= self.snrLimit)[0]
         else:
-            xval = np.power(10, 0.5*(appMag - magLimit))
-            snr = 1.0 / np.sqrt((0.04 - self.gamma)*xval + self.gamma*xval*xval)
-            vis = np.where(snr >= self.snrLimit)[0]
+            vis = np.where(ssoObs[self.visCol] > 0)[0]
         if len(vis) == 0:
-            return 0
+            return self.badval
         else:
             # Now to identify where observations meet the timing requirements.
             #  Identify visits where the 'night' changes.
@@ -473,3 +464,62 @@ class DiscoveryChancesMetric(BaseMoMetric):
                 dnights = (np.roll(ssoObs[self.nightCol][goodIdx], 1-self.nNightsPerWindow) - ssoObs[self.nightCol][goodIdx])
                 discoveryChances = len(np.where((dnights >= 0) & (dnights <= self.tWindow))[0])
         return discoveryChances
+
+
+class MagicDiscoveryMetric(BaseMoMetric):
+    """
+    Count the number of discovery opportunities with very good software.
+    """
+    def __init__(self, nObs=6, tWindow=30, snrLimit=None, **kwargs):
+        """
+        @ nObs = the total number of observations required for 'discovery'
+        @ tWindow = the timespan of the discovery window.
+        @ snrLimit .. if snrLimit is None then uses 'completeness' calculation,
+                   .. if snrLimit is not None, then uses this value as a cutoff.
+        """
+        super(MagicDiscoveryMetric, self).__init__(**kwargs)
+        self.snrLimit = snrLimit
+        self.nObs = nObs
+        self.tWindow = tWindow
+        self.badval = 0
+
+    def run(self, ssoObs, orb, Hval):
+        """SsoObs = Dataframe, orb=Dataframe, Hval=single number."""
+        # Calculate visibility for this orbit at this H.
+        if self.snrLimit is not None:
+            vis = np.where(ssoObs[self.snrCol] >= self.snrLimit)[0]
+        else:
+            vis = np.where(ssoObs[self.visCol] > 0)[0]
+        if len(vis) == 0:
+            return self.badval
+        tNights = np.sort(ssoObs['night'][vis])
+        deltaNights = np.roll(tNights, 1-self.nObs) - tNights
+        nDisc = np.where((deltaNights <= self.tWindow) & (deltaNights > 0))[0].size
+        return nDisc
+
+
+
+class HighVelocityMetric(BaseMoMetric):
+    """
+    Count the number of times an asteroid is observed with velocity higher than a threshhold.
+    """
+    def __init__(self, velocity=1.0, snrLimit=None, **kwargs):
+        """
+        @ velocity = velocity threshhold, deg/day
+        """
+        super(HighVelocityMetric, self).__init__(**kwargs)
+        self.snrLimit = snrLimit
+        self.velocity = velocity
+        self.badval = 0
+        self.gamma = 0.038
+        self.sigma = 0.12
+
+    def run(self, ssoObs, orb, Hval):
+        if self.snrLimit is not None:
+            vis = np.where(ssoObs[self.snrCol] >= self.snrLimit)[0]
+        else:
+            vis = np.where(ssoObs[self.visCol] > 0)[0]
+        if len(vis) == 0:
+            return self.badval
+        highVelocityObs = (np.where(ssoObs['velocity'][vis] > self.velocity)[0]).size
+        return highVelocityObs

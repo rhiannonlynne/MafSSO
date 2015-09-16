@@ -88,8 +88,10 @@ class MetricVsH(BasePlotter):
             ax2.set_xlim(dmax, dmin)
             ax2.set_xscale('log')
             ax2.set_xlabel('D (km)', labelpad=-10, horizontalalignment='right')
+            ax2.grid(False)
             plt.sca(ax)
             y = 1.1
+        plt.grid(True)
         plt.title(plotDict['title'], y=y)
         plt.xlabel(plotDict['xlabel'])
         plt.ylabel(plotDict['ylabel'])

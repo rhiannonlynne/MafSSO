@@ -2,7 +2,7 @@ import os, argparse
 import numpy as np
 import matplotlib.pyplot as plt
 
-import moObs as moObs
+from moObs import MoObs
 
 import lsst.sims.maf.plots as plots
 from moSlicer import MoSlicer
@@ -12,7 +12,6 @@ import moPlots as moPlots
 import moMetricBundle as mmb
 
 
-
 def makeObs(orbitfile, obsfile, opsimdb, rFov, useCamera):
     """
     Generates and writes observations of objects in orbitfile into obsfile, using observations from opsimdb.
@@ -20,7 +19,35 @@ def makeObs(orbitfile, obsfile, opsimdb, rFov, useCamera):
     """
     # rFov = fov in radians
     # useCamera = True/False (use camera footprint)
-    moObs.runMoObs(orbitfile, obsfile, opsimdb, rFov=rFov, useCamera=useCamera, tstep=2./24.)
+    #moObs.runMoObs(orbitfile, obsfile, opsimdb, rFov=rFov, useCamera=useCamera, tstep=2./24.)
+    # Read orbits.
+    moogen = MoObs()
+    moogen.readOrbits(orbitfile)
+    print "Read orbit information from %s" %(orbitfile)
+
+    # Check rfov/camera choices.
+    if useCamera:
+        print "Using camera footprint"
+    else:
+        print "Not using camera footprint; using circular fov with %f degrees radius" %(np.degrees(rFov))
+
+    # Read data for visits from numpy file on disk (generated from CombineObs)
+    import pandas as pd
+    simdata = pd.read_csv(opsimdb)
+    simdata = simdata.to_records()
+    print "Read data from opsim %s, fetched %d visits." %(opsimdb, len(simdata['expMJD']))
+
+    tstep=2./24.
+    moogen.setTimesRange(timeStep=tstep, timeStart=simdata['expMJD'].min(), timeEnd=simdata['expMJD'].max())
+    print "Will generate ephemerides on grid of %f day timesteps, then extrapolate to opsim times." %(tstep)
+
+    moogen.setupOorb()
+    for i, sso in moogen.orbits.iterrows():
+        ephs = moogen.generateEphs(sso)
+        interpfuncs = moogen.interpolateEphs(ephs)
+        idxObs = moogen.ssoInFov(interpfuncs, simdata, rFov=rFov, useCamera=useCamera)
+        moogen.writeObs(sso['objId'], interpfuncs, simdata, idxObs,  sedname=sso['sed_filename'],  outfileName=obsfile)
+    print "Wrote output observations to file %s" %(obsfile)
 
 
 def calcCompleteness(orbitfile, obsfile, outDir, runName, metadata=None):
@@ -175,7 +202,7 @@ if __name__ == '__main__':
     else:
         obsfile = args.obsFile
     opsimdb = args.dbFile
-    runName = os.path.split(opsimdb)[-1].replace('_sqlite.db', '')
+    runName = os.path.split(opsimdb)[-1].replace('_summary.csv', '')
     metadata = '%s' %(orbitroot)
     rFov = np.radians(1.75)
     useCamera = True
