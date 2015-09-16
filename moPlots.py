@@ -169,7 +169,11 @@ class MetricVsOrbit(BasePlotter):
         else:
             mVals = metricValue[Hidx].filled()
         # Calculate the npReduce'd metric values at each x/y bin.
-        binvals = np.zeros((nybins, nxbins), dtype='float') + slicer.badval
+        if 'colorMin' in plotDict:
+            badval = plotDict['colorMin'] - 1
+        else:
+            badval = slicer.badval
+        binvals = np.zeros((nybins, nxbins), dtype='float') + badval
         xidxs = np.digitize(xvals, xbins) - 1
         yidxs = np.digitize(yvals, ybins) - 1
         reduceFunc = plotDict['npReduce']
