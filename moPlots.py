@@ -21,7 +21,7 @@ class MetricVsH(BasePlotter):
         self.plotType = 'MetricVsH'
         self.objectPlotter = False
         self.defaultPlotDict = {'title':None, 'xlabel':'H (mag)', 'ylabel':None, 'label':None,
-                                'npReduce':None, 'nbins':None, 'albedo':None}
+                                'npReduce':None, 'nbins':None, 'albedo':None, 'Hmark':None}
         self.minHrange=1.0
 
     def __call__(self, metricValue, slicer, userPlotDict, fignum=None):
@@ -94,6 +94,8 @@ class MetricVsH(BasePlotter):
             plt.sca(ax)
             y = 1.1
         plt.grid(True)
+        if plotDict['Hmark'] is not None:
+            plt.axvline(x=plotDict['Hmark'], color='r', linestyle=':', alpha=0.3)
         plt.title(plotDict['title'], y=y)
         plt.xlabel(plotDict['xlabel'])
         plt.ylabel(plotDict['ylabel'])
