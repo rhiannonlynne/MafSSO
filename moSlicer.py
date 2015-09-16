@@ -55,6 +55,8 @@ class MoSlicer(MoOrbits):
             self.allObs.columns = newcols
         if 'magFilter' not in self.allObs.columns.values:
             self.allObs['magFilter'] = self.allObs['magV'] + self.allObs['dmagColor']
+        if 'velocity' not in self.allObs.columns.values:
+            self.allObs['velocity'] = np.sqrt(self.allObs['dradt']**2 + self.allObs['ddecdt']**2)
         # If we created intermediate data products by pandas, we may have an inadvertent 'index'
         #  column. Since this creates problems later, drop it here.
         self.allObs.drop('index', axis=1, inplace=True)
