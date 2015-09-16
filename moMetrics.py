@@ -8,7 +8,8 @@ __all__ = ['BaseMoMetric', 'NObsMetric', 'NObsNoSinglesMetric',
            'DiscoveryMetric', 'Discovery_N_ChancesMetric', 'Discovery_N_ObsMetric',
            'Discovery_TimeMetric', 'Discovery_RADecMetric', 'Discovery_EcLonLatMetric',
            'ActivityOverTimeMetric', 'ActivityOverPeriodMetric',
-           'DiscoveryChancesMetric', 'MagicDiscoveryMetric', 'HighVelocityMetric']
+           'DiscoveryChancesMetric', 'MagicDiscoveryMetric',
+           'HighVelocityMetric', 'HighVelocityNightsMetric']
 
 
 class BaseMoMetric(BaseMetric):
@@ -19,7 +20,8 @@ class BaseMoMetric(BaseMetric):
                  appMagCol='appMag', m5Col='magLimit',
                  nightCol='night', expMJDCol='expMJD',
                  snrCol='SNR',  visCol='vis',
-                 raCol='ra', decCol='dec'):
+                 raCol='ra', decCol='dec', seeingCol='finSeeing',
+                 expTimeCol='visitExpTime'):
         # Set metric name.
         self.name = metricName
         if self.name is None:
@@ -37,6 +39,8 @@ class BaseMoMetric(BaseMetric):
         self.visCol = visCol
         self.raCol = raCol
         self.decCol = decCol
+        self.seeingCol = seeingCol
+        self.expTimeCol = expTimeCol
         self.colsReq = [self.appMagCol, self.m5Col,
                         self.nightCol, self.expMJDCol,
                         self.snrCol, self.visCol]
@@ -221,7 +225,7 @@ class DiscoveryMetric(BaseMoMetric):
             return self.badval
         deltaNights = np.roll(ssoObs[self.nightCol][vis][goodIdx], 1 - self.nNightsPerWindow) - ssoObs[self.nightCol][vis][goodIdx]
         # Identify the index in ssoObs[vis][goodIdx] (sorted by expMJD) where the discovery opportunity starts.
-        startIdxs = np.where((deltaNights > 0) & (deltaNights <= self.tWindow))[0]
+        startIdxs = np.where((deltaNights >= 0) & (deltaNights <= self.tWindow))[0]
         # Identify the index where the discovery opportunity ends.
         endIdxs = np.zeros(len(startIdxs), dtype='int')
         for i, sIdx in enumerate(startIdxs):
@@ -230,8 +234,8 @@ class DiscoveryMetric(BaseMoMetric):
         # Convert back to index based on ssoObs[vis] (sorted by expMJD).
         startIdxs = goodIdx[startIdxs]
         endIdxs = goodIdxEnds[endIdxs]
-        #print 'start', startIdxs,  nights[startIdxs], orb['objId'], Hval
-        #print 'end', endIdxs, nights[endIdxs], orb['objId'], Hval
+        #print 'start', startIdxs,  nights[startIdxs]#, orb['objId'], Hval
+        #print 'end', endIdxs, nights[endIdxs]#, orb['objId'], Hval
         return {'start':startIdxs, 'end':endIdxs, 'trackletNights':ssoObs[self.nightCol][goodIdx]}
 
 
@@ -436,26 +440,31 @@ class DiscoveryChancesMetric(BaseMoMetric):
             n = np.unique(ssoObs[self.nightCol][visSort])
             # Identify all the indexes where the night changes (swap from one night to next)
             nIdx = np.searchsorted(ssoObs[self.nightCol][visSort], n)
-            # Add index pointing to last observation.
-            nIdx = np.concatenate([nIdx, np.array([len(visSort)-1])])
-            # Find the nights & indexes where there were more than nObsPerNight observations.
+            # Count the number of observations per night (except last night)
             obsPerNight = (nIdx - np.roll(nIdx, 1))[1:]
+            # Add the number of observations on the last night.
+            obsLastNight = np.array([len(visSort) - nIdx[-1]])
+            obsPerNight = np.concatenate((obsPerNight, obsLastNight))
+            # Find the nights with at least nObsPerNight visits.
             nWithXObs = n[np.where(obsPerNight >= self.nObsPerNight)]
             nIdxMany = np.searchsorted(ssoObs[self.nightCol][visSort], nWithXObs)
             nIdxManyEnd = np.searchsorted(ssoObs[self.nightCol][visSort], nWithXObs, side='right') - 1
             # Check that nObsPerNight observations are within tNight
             timesStart = ssoObs[self.expMJDCol][visSort][nIdxMany]
             timesEnd = ssoObs[self.expMJDCol][visSort][nIdxManyEnd]
-            # Identify the nights where the total time interval may exceed tNight
-            # (but still have a subset of nObsPerNight which are within tNight)
-            check = np.where((timesEnd - timesStart > self.tNight) & (nIdxManyEnd + 1 - nIdxMany > self.nObsPerNight))[0]
-            bad = []
+            # Identify the nights with 'clearly good' observations.
+            good = np.where(timesEnd - timesStart <= self.tNight, 1, 0)
+            # Identify the nights where we need more investigation (a subset of the visits may be within the interval).
+            check = np.where((good==0) & (nIdxManyEnd + 1 - nIdxMany > self.nObsPerNight) & (timesEnd-timesStart > self.tNight))[0]
             for i, j, c in zip(visSort[nIdxMany][check], visSort[nIdxManyEnd][check], check):
                 t = ssoObs[self.expMJDCol][i:j+1]
-                dtimes = (np.roll(t, 1-self.nObsPerNight) - t)[:-1]
-                if np.all(dtimes > self.tNight):
-                    bad.append(c)
-            goodIdx = np.delete(visSort[nIdxMany], bad)
+                dtimes = (np.roll(t, 1- self.nObsPerNight) - t)[:-1]
+                if np.any(dtimes <= self.tNight):
+                    good[c] = 1
+            # 'good' provides mask for observations which could count as 'good to make tracklets' against ssoObs[visSort][nIdxMany]
+            # Now identify tracklets which can make tracks.
+            goodIdx = visSort[nIdxMany][good == 1]
+            #print 'good tracklet nights', ssoObs[self.nightCol][goodIdx]
             # Now (with indexes of start of 'good' nights with nObsPerNight within tNight),
             # look at the intervals between 'good' nights (for tracks)
             if len(goodIdx) < self.nNightsPerWindow:
@@ -492,27 +501,25 @@ class MagicDiscoveryMetric(BaseMoMetric):
             vis = np.where(ssoObs[self.visCol] > 0)[0]
         if len(vis) == 0:
             return self.badval
-        tNights = np.sort(ssoObs['night'][vis])
+        tNights = np.sort(ssoObs[self.nightCol][vis])
         deltaNights = np.roll(tNights, 1-self.nObs) - tNights
-        nDisc = np.where((deltaNights <= self.tWindow) & (deltaNights > 0))[0].size
+        nDisc = np.where((deltaNights < self.tWindow) & (deltaNights >= 0))[0].size
         return nDisc
-
-
 
 class HighVelocityMetric(BaseMoMetric):
     """
-    Count the number of times an asteroid is observed with velocity higher than a threshhold.
+    Count the number of times an asteroid is observed with a velocity high enough to make it appear
+    trailed by a factor of (psfFactor)*PSF - i.e. velocity >= psfFactor * seeing / visitExpTime.
+    Simply counts the total number of observations with high velocity.
     """
-    def __init__(self, velocity=1.0, snrLimit=None, **kwargs):
+    def __init__(self, psfFactor=2.0,  snrLimit=None, **kwargs):
         """
-        @ velocity = velocity threshhold, deg/day
+        @ psfFactor = factor to multiply seeing/visitExpTime by (velocity(deg/day) >= 24*psfFactor*seeing(")/visitExptime(s))
         """
         super(HighVelocityMetric, self).__init__(**kwargs)
         self.snrLimit = snrLimit
-        self.velocity = velocity
+        self.psfFactor = psfFactor
         self.badval = 0
-        self.gamma = 0.038
-        self.sigma = 0.12
 
     def run(self, ssoObs, orb, Hval):
         if self.snrLimit is not None:
@@ -521,5 +528,47 @@ class HighVelocityMetric(BaseMoMetric):
             vis = np.where(ssoObs[self.visCol] > 0)[0]
         if len(vis) == 0:
             return self.badval
-        highVelocityObs = (np.where(ssoObs['velocity'][vis] > self.velocity)[0]).size
-        return highVelocityObs
+        highVelocityObs = np.where(ssoObs['velocity'][vis] >=
+                                   (24.*  self.psfFactor * ssoObs[self.seeingCol][vis] / ssoObs[self.expTimeCol][vis]))[0]
+        return highVelocityObs.size
+
+class HighVelocityNightsMetric(BaseMoMetric):
+    """
+    Count the number of times an asteroid is observed with a velocity high enough to make it appear
+    trailed by a factor of (psfFactor)*PSF - i.e. velocity >= psfFactor * seeing / visitExpTime,
+    where we require nObsPerNight observations within a given night.
+    Counts the total number of nights with enough high-velocity observations.
+    """
+    def __init__(self, psfFactor=2.0, nObsPerNight=2, snrLimit=None, **kwargs):
+        """
+        @ psfFactor = factor to multiply seeing/visitExpTime by (velocity(deg/day) >= 24*psfFactor*seeing(")/visitExptime(s))
+        @ nObsPerNight = number of observations required per night
+        """
+        super(HighVelocityNightsMetric, self).__init__(**kwargs)
+        self.snrLimit = snrLimit
+        self.psfFactor = psfFactor
+        self.nObsPerNight = nObsPerNight
+        self.badval = 0
+
+    def run(self, ssoObs, orb, Hval):
+        if self.snrLimit is not None:
+            vis = np.where(ssoObs[self.snrCol] >= self.snrLimit)[0]
+        else:
+            vis = np.where(ssoObs[self.visCol] > 0)[0]
+        if len(vis) == 0:
+            return self.badval
+        highVelocityObs = np.where(ssoObs['velocity'][vis] >=
+                                   (24.*  self.psfFactor * ssoObs[self.seeingCol][vis] / ssoObs[self.expTimeCol][vis]))[0]
+        if len(highVelocityObs) == 0:
+            return self.badval
+        nights = ssoObs[self.nightCol][vis][highVelocityObs]
+        n = np.unique(nights)
+        nIdx = np.searchsorted(nights, n)
+        # Count the number of observations per night (except last night)
+        obsPerNight = (nIdx - np.roll(nIdx, 1))[1:]
+        # Add the number of observations on the last night.
+        obsLastNight = np.array([len(nights) - nIdx[-1]])
+        obsPerNight = np.concatenate((obsPerNight, obsLastNight))
+        # Find the nights with at least nObsPerNight visits (this is already looking at only high velocity observations).
+        nWithXObs = n[np.where(obsPerNight >= self.nObsPerNight)]
+        return nWithXObs.size
