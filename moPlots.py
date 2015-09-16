@@ -8,7 +8,9 @@ from lsst.sims.maf.plots import BasePlotter
 
 mag_sun = -27.1 # apparent r band magnitude of the sun. this sets the band for the magnitude limit.
 # see http://www.ucolick.org/~cnaw/sun.html for apparent magnitudes in other bands.
+mag_sun = -26.74 # apparent V band magnitude of the Sun (our H mags translate to V band)
 km_per_au = 1.496e8
+m_per_km = 1000
 
 class MetricVsH(BasePlotter):
     """
@@ -83,11 +85,11 @@ class MetricVsH(BasePlotter):
             Hmin, Hmax = ax.get_xlim()
             dmax = 2.0 * np.sqrt(10**((mag_sun - Hmin - 2.5*np.log10(albedo))/2.5))
             dmin = 2.0 * np.sqrt(10**((mag_sun - Hmax - 2.5*np.log10(albedo))/2.5))
-            dmax = dmax * km_per_au
-            dmin = dmin * km_per_au
+            dmax = dmax * km_per_au * m_per_km
+            dmin = dmin * km_per_au * m_per_km
             ax2.set_xlim(dmax, dmin)
             ax2.set_xscale('log')
-            ax2.set_xlabel('D (km)', labelpad=-10, horizontalalignment='right')
+            ax2.set_xlabel('D (m)', labelpad=-10, horizontalalignment='right')
             ax2.grid(False)
             plt.sca(ax)
             y = 1.1
