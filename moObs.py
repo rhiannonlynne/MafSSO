@@ -11,7 +11,7 @@ import lsst.sims.photUtils.Sed as Sed
 
 from lsst.sims.utils import haversine, ObservationMetaData
 from lsst.obs.lsstSim import LsstSimMapper
-from lsst.sims.coordUtils import findChipName, observedFromICRS
+from lsst.sims.coordUtils import _findChipName, _chipNameFromRaDec # Need master of sims_coordUtils
 
 __all__ = ['MoOrbits', 'MoObs', 'runMoObs']
 
@@ -36,13 +36,16 @@ class MoOrbits(object):
                 colMap[outCol] = a
         return colMap
 
-    def readOrbits(self, orbitfile):
+    def readOrbits(self, orbitfile, delim=None):
         """
         Read the orbits from file 'orbitfile', generating a numpy structured array with the columns:
         'objID q e inc node argPeri tPeri epoch H g a meanAnom sed_filename'
         """
         self.orbitfile = orbitfile
-        orbits = pd.read_table(orbitfile, delim_whitespace=True)
+        if delim is None:
+            orbits = pd.read_table(orbitfile, delim_whitespace=True)
+        else:
+            orbits = pd.read_table(orbitfile, sep = delim)
         # Normalize the column names, as different inputs tend to have some commonly-different names.
         ssoCols = orbits.columns.values.tolist()
         nSso = len(orbits)
@@ -55,22 +58,22 @@ class MoOrbits(object):
             else:
                 # Try to find corresponding value
                 if o == 'objId':
-                    alternatives = ['!!ObjID', 'objid', '!!OID']
+                    alternatives = ['!!ObjID', 'objid', '!!OID', 'full_name']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'inc':
                     alternatives = ['i']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'node':
-                    alternatives = ['BigOmega', 'Omega/node', 'Omega']
+                    alternatives = ['BigOmega', 'Omega/node', 'Omega', 'om']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'argPeri':
-                    alternatives = ['argperi', 'omega/argperi']
+                    alternatives = ['argperi', 'omega/argperi', 'w']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'tPeri':
                     alternatives = ['t_p', 'timeperi']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'epoch':
-                    alternatives = ['t_0']
+                    alternatives = ['t_0', 'Epoch', 'epoch_mjd']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'H':
                     alternatives = ['magH', 'magHv', 'Hv', 'H_v']
@@ -82,7 +85,7 @@ class MoOrbits(object):
                     alternatives = ['semimajor']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
                 elif o == 'meanAnom':
-                    alternatives = ['M', 'meanAnomaly']
+                    alternatives = ['M', 'meanAnomaly', 'ma']
                     colMap = self._updateColMap(colMap, o, alternatives, ssoCols)
 
         # Add the columns we can generate with some guesses.
@@ -169,7 +172,7 @@ class MoObs(MoOrbits):
         Set an array for oorb of the ephemeris times desired, given an explicit set of times.
         @ times : numpy array of the actual times of each ephemeris position.
         """
-        self.ephTimes = np.array(zip(times, repeat(4, len(time))), dtype='double', order='F')
+        self.ephTimes = np.array(zip(times, repeat(4, len(times))), dtype='double', order='F')
 
 
     def _packOorbElem(self, sso=None):
@@ -341,8 +344,8 @@ class MoObs(MoOrbits):
                                                mjd=simdata[idx]['expMJD'])
             raObj = np.radians(np.array([interpfuncs['ra'](simdata[idx]['expMJD'])]))
             decObj = np.radians(np.array([interpfuncs['dec'](simdata[idx]['expMJD'])]))
-            raObj, decObj = observedFromICRS(raObj, decObj, obs_metadata=obs_metadata, epoch=self.epoch)
-            chipNames = findChipName(ra=raObj,dec=decObj, epoch=self.epoch, camera=self.camera, obs_metadata=obs_metadata)
+            raObj, decObj = _observedFromICRS(raObj, decObj, obs_metadata=obs_metadata, epoch=self.epoch)
+            chipNames = _chipNameFromRaDec(ra=raObj,dec=decObj, epoch=self.epoch, camera=self.camera, obs_metadata=obs_metadata)
             if chipNames != [None]:
                 idxObs.append(idx)
         idxObs = np.array(idxObs)
