@@ -15,8 +15,8 @@ class AppMagStacker(BaseStacker):
         self.units = ['mag']
 
     def run(self, ssoObs, Href, Hval):
-        self._addStackers(ssoObs)
-        self._run(ssoObs, Href=Href, Hval=Hval)
+        ssoObs = self._addStackers(ssoObs)
+        return self._run(ssoObs, Href=Href, Hval=Hval)
 
     def _run(self, ssoObs, Href=None, Hval=None):
         ssoObs['appMag'] = ssoObs[self.magFilterCol] + Hval - Href
@@ -35,8 +35,8 @@ class MagLimitStacker(BaseStacker):
         self.units = ['mag']
 
     def run(self, ssoObs, Href=None, Hval=None):
-        self._addStackers(ssoObs)
-        self._run(ssoObs, Href=Href, Hval=Hval)
+        ssoObs = self._addStackers(ssoObs)
+        return self._run(ssoObs, Href=Href, Hval=Hval)
 
     def _run(self, ssoObs, Href=None, Hval=None):
         ssoObs['magLimit'] = ssoObs[self.m5Col] - ssoObs[self.lossCol]
@@ -55,8 +55,8 @@ class SNRStacker(BaseStacker):
         self.units = ['SNR']
 
     def run(self, ssoObs, Href=None, Hval=None):
-        self._addStackers(ssoObs)
-        self._run(ssoObs, Href=Href, Hval=Hval)
+        ssoObs = self._addStackers(ssoObs)
+        return self._run(ssoObs, Href=Href, Hval=Hval)
 
     def _run(self, ssoObs, Href=None, Hval=None):
         xval = np.power(10, 0.5*(ssoObs[self.appMagCol] - ssoObs[self.magLimitCol]))
@@ -81,8 +81,8 @@ class VisStacker(BaseStacker):
         self.units = ['']
 
     def run(self, ssoObs, Href=None, Hval=None):
-        self._addStackers(ssoObs)
-        self._run(ssoObs, Href=Href, Hval=Hval)
+        ssoObs = self._addStackers(ssoObs)
+        return self._run(ssoObs, Href=Href, Hval=Hval)
 
     def _run(self, ssoObs, Href=None, Hval=None):
         completeness = 1.0 / (1 + np.exp((ssoObs[self.appMagCol] - ssoObs[self.magLimitCol])/self.sigma))
@@ -105,8 +105,8 @@ class EclStacker(BaseStacker):
         self.ecinc = np.radians(23.439291)
 
     def run(self, ssoObs, Href=None, Hval=None):
-        self._addStackers(ssoObs)
-        self._run(ssoObs, Href=Href, Hval=Hval)
+        ssoObs = self._addStackers(ssoObs)
+        return self._run(ssoObs, Href=Href, Hval=Hval)
 
     def _run(self, ssoObs, Href=None, Hval=None):
         ra = ssoObs[self.raCol]
