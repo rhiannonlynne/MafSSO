@@ -11,7 +11,7 @@ import lsst.sims.photUtils.Sed as Sed
 
 from lsst.sims.utils import haversine, ObservationMetaData
 from lsst.obs.lsstSim import LsstSimMapper
-from lsst.sims.coordUtils import _findChipName, _chipNameFromRaDec # Need master of sims_coordUtils
+from lsst.sims.coordUtils import _observedFromICRS, _chipNameFromRaDec 
 
 __all__ = ['MoOrbits', 'MoObs', 'runMoObs']
 
@@ -108,6 +108,7 @@ class MoOrbits(object):
             sedvals = orbits[colMap['sed_filename']]
 
         # And some columns that can be generated from the input data we do have.
+        # This is probably not as reliable as it needs to be .. converting from a/M to q/tPeri is not accurate enough.
         if 'a' not in colMap:
             aval = orbits[colMap['q']] / (1 - orbits[colMap['e']])
         else:
